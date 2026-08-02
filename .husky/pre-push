@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Pre-push hook for SPEECK.AI
+# Corre el build completo y tests E2E antes de hacer push
+
+echo "🚀 Running pre-push checks..."
+
+# Ensure we're on a feature branch, not main
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$BRANCH" = "main" ]; then
+  echo "⚠️  You're pushing directly to main!"
+  echo "   Create a feature branch and open a PR instead."
+  read -p "Are you sure you want to push to main? (yes/no): " CONFIRM
+  if [ "$CONFIRM" != "yes" ]; then
+    echo "Push cancelled."
+    exit 1
+  fi
+fi
+
+# Run full CI suite
+echo "🔨 Running build..."
+npx next build || exit 1
+
+# Run E2E tests (only if Playwright is installed)
+if command -v npx playwright &> /dev/null; then
+  echo "🎭 Running E2E tests..."
+  npx playwright test --project=chromium || exit 1
+fi
+
+echo "✅ All pre-push checks passed!"

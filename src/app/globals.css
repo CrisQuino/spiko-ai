@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+  }
+
+  body {
+    @apply bg-gradient-to-br from-gray-50 via-emerald-50/30 to-cyan-50/30 text-gray-900;
+    font-family: 'Inter', 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .glass {
+    @apply bg-white/80 backdrop-blur-xl border border-gray-200/50 shadow-xl;
+  }
+  
+  .gradient-text {
+    @apply bg-gradient-to-r from-emerald-600 via-cyan-600 to-blue-600 bg-clip-text text-transparent;
+  }
+
+  .code-block {
+    @apply bg-gray-900 text-gray-100 rounded-xl p-6 font-mono text-sm shadow-2xl border border-gray-800;
+  }
+
+  .tech-badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-mono font-semibold border;
+  }
+
+  .tech-badge-emerald {
+    @apply tech-badge bg-emerald-500/10 text-emerald-700 border-emerald-500/20;
+  }
+
+  .tech-badge-cyan {
+    @apply tech-badge bg-cyan-500/10 text-cyan-700 border-cyan-500/20;
+  }
+
+  .tech-badge-blue {
+    @apply tech-badge bg-blue-500/10 text-blue-700 border-blue-500/20;
+  }
+}

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Pre-commit hook for SPEECK.AI
+# Corre linting, type-check, y tests rápidos antes de cada commit
+
+echo "🔍 Running pre-commit checks..."
+
+# Check for merge conflict markers
+if grep -r "<<<<<<< HEAD" src/ --include="*.ts" --include="*.tsx" 2>/dev/null; then
+  echo "❌ Merge conflict markers found! Fix before committing."
+  exit 1
+fi
+
+# Run lint
+echo "📋 Running ESLint..."
+npx next lint --max-warnings=0 || exit 1
+
+# Run type check
+echo "🔷 Running TypeScript type check..."
+npx tsc --noEmit || exit 1
+
+# Run unit tests (quick mode)
+echo "🧪 Running unit tests..."
+npx vitest run --reporter=dot || exit 1
+
+echo "✅ All pre-commit checks passed!"

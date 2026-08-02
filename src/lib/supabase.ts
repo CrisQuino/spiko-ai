@@ -1,0 +1,291 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// ============================================
+// TYPES
+// ============================================
+
+export type Profile = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: 'employee' | 'manager' | 'admin';
+  company_id: string | null;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Company = {
+  id: string;
+  name: string;
+  slug: string;
+  plan: 'free' | 'team' | 'enterprise';
+  max_users: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Conversation = {
+  id: string;
+  user_id: string;
+  company_id: string | null;
+  scenario_id: string;
+  scenario_title: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  role: 'dba' | 'devops' | 'network';
+  started_at: string;
+  completed_at: string | null;
+  duration_seconds: number | null;
+  status: 'in_progress' | 'completed' | 'abandoned';
+  progress: number;
+  english_score: number | null;
+  technical_score: number | null;
+  communication_score: number | null;
+  overall_score: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Message = {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'ai';
+  content: string;
+  timestamp: string;
+  audio_url: string | null;
+  created_at: string;
+};
+
+export type VocabularyUsage = {
+  id: string;
+  user_id: string;
+  conversation_id: string | null;
+  word: string;
+  context: string | null;
+  category: 'technical' | 'general' | 'advanced';
+  first_used_at: string;
+  times_used: number;
+  created_at: string;
+};
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+export async function getCurrentUser() {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}
+
+export async function getUserProfile(userId: string): Promise<Profile | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+  
+  if (error) {
+    console.error('Error fetching profile:', error);
+    return null;
+  }
+  
+  return data;
+}
+
+export async function getCompany(companyId: string): Promise<Company | null> {
+  const { data, error } = await supabase
+    .from('companies')
+    .select('*')
+    .eq('id', companyId)
+    .single();
+  
+  if (error) {
+    console.error('Error fetching company:', error);
+    return null;
+  }
+  
+  return data;
+}
+
+export async function getUserConversations(userId: string): Promise<Conversation[]> {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('user_id', userId)
+    .order('started_at', { ascending: false });
+  
+  if (error) {
+    console.error('Error fetching conversations:', error);
+    return [];
+  }
+  
+  return data;
+}
+
+export async function getCompanyConversations(companyId: string): Promise<Conversation[]> {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('started_at', { ascending: false });
+  
+  if (error) {
+    console.error('Error fetching company conversations:', error);
+    return [];
+  }
+  
+  return data;
+}
+
+export async function getCompanyEmployees(companyId: string): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('company_id', companyId)
+    .order('full_name', { ascending: true });
+  
+  if (error) {
+    console.error('Error fetching employees:', error);
+    return [];
+  }
+  
+  return data;
+}
+
+// ============================================
+// ANALYTICS HELPERS
+// ============================================
+
+export type UserStats = {
+  totalConversations: number;
+  completedConversations: number;
+  averageScore: number;
+  totalTimeMinutes: number;
+  lastActivity: string | null;
+};
+
+export async function getUserStats(userId: string): Promise<UserStats> {
+  const conversations = await getUserConversations(userId);
+  
+  const completed = conversations.filter(c => c.status === 'completed');
+  
+  const totalScore = completed.reduce((sum, c) => sum + (c.overall_score || 0), 0);
+  const avgScore = completed.length > 0 ? Math.round(totalScore / completed.length) : 0;
+  
+  const totalTime = conversations.reduce((sum, c) => sum + (c.duration_seconds || 0), 0);
+  const totalMinutes = Math.round(totalTime / 60);
+  
+  const lastActivity = conversations.length > 0 ? conversations[0].started_at : null;
+  
+  return {
+    totalConversations: conversations.length,
+    completedConversations: completed.length,
+    averageScore: avgScore,
+    totalTimeMinutes: totalMinutes,
+    lastActivity
+  };
+}
+
+export type CompanyStats = {
+  totalEmployees: number;
+  activeThisMonth: number;
+  totalConversations: number;
+  averageScore: number;
+  topPerformers: Array<{ profile: Profile; stats: UserStats }>;
+  total_sessions?: number;
+  lessons_today?: number;
+};
+
+export async function getCompanyStats(companyId: string): Promise<CompanyStats> {
+  // Use the new SQL function for optimized stats
+  const { data, error } = await supabase
+    .rpc('get_company_stats', { p_company_id: companyId });
+  
+  if (error) {
+    console.error('Error fetching company stats:', error);
+    // Fallback to manual calculation
+    return await getCompanyStatsManual(companyId);
+  }
+  
+  const stats = data[0] || {
+    total_employees: 0,
+    lessons_this_month: 0,
+    lessons_today: 0,
+    total_lessons: 0,
+    avg_score: 0,
+    active_users_this_month: 0
+  };
+  
+  // Get top performers separately
+  const employees = await getCompanyEmployees(companyId);
+  const employeeStats = await Promise.all(
+    employees.map(async (employee) => ({
+      profile: employee,
+      stats: await getUserStats(employee.id)
+    }))
+  );
+  
+  const topPerformers = employeeStats
+    .filter(e => e.stats.completedConversations > 0)
+    .sort((a, b) => b.stats.averageScore - a.stats.averageScore)
+    .slice(0, 5);
+  
+  return {
+    totalEmployees: stats.total_employees,
+    activeThisMonth: stats.active_users_this_month,
+    totalConversations: stats.total_lessons,
+    averageScore: Math.round(stats.avg_score || 0),
+    topPerformers,
+    total_sessions: stats.total_lessons,
+    lessons_today: stats.lessons_today
+  };
+}
+
+// Fallback manual calculation if SQL function fails
+async function getCompanyStatsManual(companyId: string): Promise<CompanyStats> {
+  const employees = await getCompanyEmployees(companyId);
+  const conversations = await getCompanyConversations(companyId);
+  
+  // Active this month
+  const oneMonthAgo = new Date();
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+  const activeEmployees = new Set(
+    conversations
+      .filter(c => new Date(c.started_at) > oneMonthAgo)
+      .map(c => c.user_id)
+  );
+  
+  // Average score
+  const completed = conversations.filter(c => c.status === 'completed' && c.overall_score);
+  const avgScore = completed.length > 0
+    ? Math.round(completed.reduce((sum, c) => sum + c.overall_score!, 0) / completed.length)
+    : 0;
+  
+  // Top performers
+  const employeeStats = await Promise.all(
+    employees.map(async (employee) => ({
+      profile: employee,
+      stats: await getUserStats(employee.id)
+    }))
+  );
+  
+  const topPerformers = employeeStats
+    .filter(e => e.stats.completedConversations > 0)
+    .sort((a, b) => b.stats.averageScore - a.stats.averageScore)
+    .slice(0, 5);
+  
+  return {
+    totalEmployees: employees.length,
+    activeThisMonth: activeEmployees.size,
+    totalConversations: conversations.length,
+    averageScore: avgScore,
+    topPerformers,
+    total_sessions: conversations.length,
+    lessons_today: 0
+  };
+}
