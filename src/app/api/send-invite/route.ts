@@ -2,7 +2,21 @@ import { Resend } from 'resend';
 import { NextResponse } from 'next/server';
 import { config } from '@/lib/config';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy initialization - only create Resend client when needed at runtime
+let resend: Resend | null = null;
+
+function getResend() {
+  if (!resend) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new Error('RESEND_API_KEY not configured');
+    }
+    resend = new Resend(apiKey);
+  }
+  return resend;
+}
+
+export async function POST(req: Request) {
 
 export async function POST(req: Request) {
   try {
@@ -64,7 +78,7 @@ export async function POST(req: Request) {
 
     // Send email
     console.log('📤 Attempting to send email...');
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResend().emails.send({
       from: config.email.from,
       to: emailTo,
       subject: `${TESTING_MODE ? '[TEST] ' : ''}Join ${companyName} on SPEECK.AI! 🎉`,
