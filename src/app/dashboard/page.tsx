@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase, getUserProfile, getUserConversations, getUserStats, type Profile, type Conversation, type UserStats } from '@/lib/supabase';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -16,19 +16,18 @@ export default function DashboardPage() {
   const [isUserAdmin, setIsUserAdmin] = useState(false);
   const [isManager, setIsManager] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     // Check for error messages from redirect
-    const error = searchParams.get('error');
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get('error');
     if (error === 'admin_required') {
       setErrorMessage('Access denied: Admin privileges required');
-      // Clear error from URL after 5 seconds
       setTimeout(() => setErrorMessage(null), 5000);
     }
     
     loadDashboard();
-  }, [searchParams]);
+  }, []);
 
   const loadDashboard = async () => {
     try {
@@ -39,21 +38,14 @@ export default function DashboardPage() {
         return;
       }
       
-      // Check if user is admin (dash.crs@gmail.com)
       const isAdminUser = user.email === 'dash.crs@gmail.com';
       setIsUserAdmin(isAdminUser);
       
-      console.log('🔐 User email:', user.email);
-      console.log('🔐 Is Admin:', isAdminUser);
-
       let userProfile = await getUserProfile(user.id);
       
-      // Check if user is Manager
       if (userProfile) {
         const isManagerRole = userProfile.role === 'manager';
         setIsManager(isManagerRole);
-        console.log('👤 User role:', userProfile.role);
-        console.log('👤 Is Manager:', isManagerRole);
       }
       
       if (userProfile && !userProfile.full_name && user.user_metadata?.full_name) {
@@ -183,29 +175,29 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard
             icon="📚"
-            title="total_sessions"
-            value={stats?.total_sessions || 0}
-            subtitle={`${stats?.total_sessions || 0} completed`}
+            title="totalConversations"
+            value={stats?.totalConversations || 0}
+            subtitle={`${stats?.totalConversations || 0} completed`}
             delay={0}
           />
           <StatCard
             icon="✅"
-            title="avg_score"
-            value={`${stats?.avg_score || 0}/100`}
+            title="averageScore"
+            value={`${stats?.averageScore || 0}/100`}
             subtitle="Overall performance"
             delay={0.1}
           />
           <StatCard
             icon="⏱"
             title="practice_time"
-            value={`${stats?.total_time || 0}m`}
+            value={`${stats?.totalTimeMinutes || 0}m`}
             subtitle="Total speaking time"
             delay={0.2}
           />
           <StatCard
             icon="⚡"
             title="last_activity"
-            value={stats?.last_session ? 'Recently' : 'No activity'}
+            value={stats?.lastActivity ? 'Recently' : 'No activity'}
             subtitle="Most recent session"
             delay={0.3}
           />
@@ -254,16 +246,16 @@ export default function DashboardPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <p className="font-mono text-sm font-bold text-gray-800">
-                            {conv.scenario || 'Database Crisis'}
+                            {conv.scenario_title || 'Database Crisis'}
                           </p>
                           <p className="font-mono text-xs text-gray-500 mt-1">
-                            <span className="text-emerald-600">{conv.date || 'Today'}</span>
+                            <span className="text-emerald-600">{conv.started_at || 'Today'}</span>
                             <span className="mx-2">•</span>
-                            <span>{conv.duration || '5m'}</span>
+                            <span>{conv.duration_seconds || '5m'}</span>
                           </p>
                         </div>
                         <div className="tech-badge-cyan">
-                          {conv.score || 'B2'}
+                          {conv.overall_score || 'B2'}
                         </div>
                       </div>
                     </div>

@@ -268,7 +268,7 @@ export default function AdminDashboard() {
                     ${(user.total_cost || 0).toFixed(2)}
                   </p>
                   <p className="font-mono text-xs text-gray-500">
-                    ${((user.total_cost || 0) / (user.lesson_count || 1)).toFixed(4)}/lesson
+                    ${((user.total_cost || 0) / (user.lessons_count || 1)).toFixed(4)}/lesson
                   </p>
                 </div>
               </div>

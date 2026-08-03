@@ -32,11 +32,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
--e 
+
 # Audio cache directory (filesystem strategy)
 .cache/
 
-# Audio cache (filesystem strategy)
-.cache/
-
-.vercel
+# GitHub auto-deploy token (sensitive)
+.github-token

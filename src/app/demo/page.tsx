@@ -58,7 +58,7 @@ export default function DemoPage() {
     // Create a reusable audio element
     if (!audioElementRef.current) {
       audioElementRef.current = new Audio();
-      audioElementRef.current.playsInline = true;
+      (audioElementRef.current as any).playsInline = true;
       (audioElementRef.current as any).webkitPlaysInline = true;
     }
     
@@ -358,7 +358,7 @@ export default function DemoPage() {
         grammar: { level: 'B2', score: 75, description: 'Good grammar' },
         interaction: { level: 'B2', score: 75, description: 'Good interaction' },
         comprehension: { level: 'B2', score: 75, description: 'Good comprehension' },
-        technicalJargon: { level: 'Intermediate', score: 75, termsUsed: [], accuracy: 75 },
+        technicalJargon: { level: 'Intermediate', termsUsed: [], accuracy: 75 },
         quickFeedback: [],
         finalFeedback: 'Great job! Keep practicing.'
       });
@@ -416,7 +416,7 @@ export default function DemoPage() {
           grammar: { level: 'B2', score: 75, description: 'Estimated' },
           interaction: { level: 'B2', score: 75, description: 'Estimated' },
           comprehension: { level: 'B2', score: 75, description: 'Estimated' },
-          technicalJargon: { level: 'Intermediate', score: 75, termsUsed: [], accuracy: 75 },
+          technicalJargon: { level: 'Intermediate', termsUsed: [], accuracy: 75 },
           quickFeedback: [],
           finalFeedback: 'Great work completing the scenario!'
         });
@@ -440,7 +440,7 @@ export default function DemoPage() {
         grammar: { level: 'B2', score: 75, description: 'Estimated' },
         interaction: { level: 'B2', score: 75, description: 'Estimated' },
         comprehension: { level: 'B2', score: 75, description: 'Estimated' },
-        technicalJargon: { level: 'Intermediate', score: 75, termsUsed: [], accuracy: 75 },
+        technicalJargon: { level: 'Intermediate', termsUsed: [], accuracy: 75 },
         quickFeedback: [],
         finalFeedback: 'Great work completing the scenario!'
       });
@@ -528,7 +528,7 @@ export default function DemoPage() {
     
     setMessages(prev => {
       const newMessages = [...prev, {
-        role: 'ai',
+        role: 'ai' as const,
         content,
         timestamp: Date.now()
       }];
@@ -637,7 +637,7 @@ export default function DemoPage() {
           audio.src = audioUrl;
           
           // Set iOS-friendly attributes
-          audio.playsInline = true;
+          (audio as any).playsInline = true;
           (audio as any).webkitPlaysInline = true;
           
           audio.onended = () => {

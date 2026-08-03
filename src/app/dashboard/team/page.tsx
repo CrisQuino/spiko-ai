@@ -222,7 +222,7 @@ export default function TeamDashboardPage() {
           <StatCard
             icon="📚"
             title="sessions_month"
-            value={stats?.total_sessions || stats?.totalConversations || 0}
+            value={stats?.totalConversations || stats?.totalConversations || 0}
             subtitle="This month"
             delay={0.2}
           />
@@ -295,7 +295,7 @@ export default function TeamDashboardPage() {
                             {employee.role || 'employee'}
                           </div>
                           <div className="text-sm font-mono text-gray-600">
-                            <span className="text-emerald-600">{employee.total_sessions || 0}</span> sessions
+                            <span className="text-emerald-600">{0 || 0}</span> sessions
                           </div>
                         </div>
                       </div>
