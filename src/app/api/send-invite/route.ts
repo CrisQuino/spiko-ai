@@ -17,8 +17,6 @@ function getResend() {
 }
 
 export async function POST(req: Request) {
-
-export async function POST(req: Request) {
   try {
     // DEBUG: Log environment
     console.log('=== EMAIL SEND DEBUG ===');
