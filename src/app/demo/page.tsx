@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { generateQuickFeedback, evaluateCEFR, type CEFRAssessment } from '@/lib/cefr-evaluator';
-import { supabase } from '@/lib/supabase';
+import { supabase, getJobDescription } from '@/lib/supabase';
+import { getLanguage, type LanguageConfig } from '@/lib/languages';
 
 type Message = {
   role: 'ai' | 'user';
@@ -30,6 +31,13 @@ export default function DemoPage() {
   
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [startTime, setStartTime] = useState<number | null>(null);
+
+  // Practice configuration (language + job description) read from the URL.
+  const [language, setLanguage] = useState<LanguageConfig>(() => getLanguage(null));
+  const [jdTitle, setJdTitle] = useState<string | null>(null);
+  // Refs mirror the config so async callbacks never read a stale value.
+  const languageRef = useRef<LanguageConfig>(getLanguage(null));
+  const jdRef = useRef<{ content: string | null; title: string | null }>({ content: null, title: null });
   const [totalTokens, setTotalTokens] = useState({ input: 0, output: 0 });
   const [quickFeedback, setQuickFeedback] = useState<string[]>([]);
   const [cefrAssessment, setCefrAssessment] = useState<CEFRAssessment | null>(null);
@@ -124,6 +132,28 @@ export default function DemoPage() {
   const [demoTimeLimit] = useState(2 * 60 * 1000); // 2 minutes for demo
   const [isCheckingAuth, setIsCheckingAuth] = useState(true); // Loading state for auth check
   
+  // Read practice config (language + job description) from the URL on mount.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    const lang = getLanguage(params.get('lang'));
+    setLanguage(lang);
+    languageRef.current = lang;
+
+    const jdId = params.get('jd');
+    if (jdId) {
+      getJobDescription(jdId).then((jd) => {
+        if (jd) {
+          setJdTitle(jd.title);
+          jdRef.current = { content: jd.content, title: jd.title };
+          console.log('📋 Loaded job description:', jd.title);
+        } else {
+          console.warn('⚠️ Job description not found or not accessible:', jdId);
+        }
+      });
+    }
+  }, []);
+
   // Check authentication status on mount
   useEffect(() => {
     const checkAuth = async () => {
@@ -514,12 +544,49 @@ export default function DemoPage() {
     }
     
     setTimeout(() => {
-      addAIMessage(
-        "Hey! Sorry to bother you, but we have a problem with the database. " +
-        "Our reporting dashboard is showing data from like 2 hours ago, and customers " +
-        "are starting to complain they can't see their recent orders. Can you take a look?"
-      );
+      generateOpeningMessage();
     }, 1000);
+  };
+
+  // Fallback opening line per language, used only if the API call fails.
+  const FALLBACK_OPENER: Record<string, string> = {
+    en: "Hey, sorry to bother you — we've got an urgent issue and I could really use your help. Can you take a look?",
+    fr: "Salut, désolé de te déranger — on a un problème urgent et j'aurais vraiment besoin de ton aide. Tu peux jeter un œil ?",
+    pt: "Oi, desculpa incomodar — temos um problema urgente e eu precisaria muito da sua ajuda. Você pode dar uma olhada?",
+  };
+
+  // Ask the model to open the scenario (derived from the job description + language).
+  const generateOpeningMessage = async () => {
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [],
+          language: languageRef.current.code,
+          jobDescription: jdRef.current.content,
+          jobTitle: jdRef.current.title,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.tokenUsage) {
+          setTotalTokens(prev => ({
+            input: prev.input + (data.tokenUsage.input || 0),
+            output: prev.output + (data.tokenUsage.output || 0),
+          }));
+        }
+        if (data.message) {
+          addAIMessage(data.message);
+          return;
+        }
+      }
+      throw new Error('No opening message returned');
+    } catch (error) {
+      console.error('⚠️ Opening message failed, using fallback:', error);
+      addAIMessage(FALLBACK_OPENER[languageRef.current.code] || FALLBACK_OPENER.en);
+    }
   };
 
   const addAIMessage = (content: string) => {
@@ -541,7 +608,7 @@ export default function DemoPage() {
   };
   
   // Browser TTS fallback function (for mobile/iOS compatibility)
-  const useBrowserTTS = (text: string) => {
+  const playBrowserTTS = (text: string) => {
     console.log('🔊 Using Browser TTS fallback');
     
     if ('speechSynthesis' in window) {
@@ -549,6 +616,7 @@ export default function DemoPage() {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
+      utterance.lang = languageRef.current.bcp47;
       
       // Try to use a female voice for consistency
       const voices = window.speechSynthesis.getVoices();
@@ -618,9 +686,10 @@ export default function DemoPage() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             text,
-            isFreeUser: isDemoMode  // Use free TTS in demo mode
+            isFreeUser: isDemoMode,  // Use free TTS in demo mode
+            language: languageRef.current.code,
           }),
         });
         
@@ -688,7 +757,7 @@ export default function DemoPage() {
             setPendingAudioQueue(prev => Math.max(0, prev - 1));
             URL.revokeObjectURL(audioUrl);
             // Try browser TTS as fallback
-            useBrowserTTS(text);
+            playBrowserTTS(text);
             return;
           }
           return; // Success! Exit function
@@ -725,6 +794,7 @@ export default function DemoPage() {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
+      utterance.lang = languageRef.current.bcp47;
       
       // Try to use a female voice for consistency
       const voices = window.speechSynthesis.getVoices();
@@ -790,7 +860,7 @@ export default function DemoPage() {
     }
     
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
+    recognition.lang = languageRef.current.bcp47;
     recognition.interimResults = true; // Show interim results while speaking
     recognition.maxAlternatives = 1;
     recognition.continuous = true; // Keep listening even during pauses
@@ -962,7 +1032,9 @@ export default function DemoPage() {
         },
         body: JSON.stringify({
           messages: conversationHistory,
-          scenario: 'db-replication-crisis',
+          language: languageRef.current.code,
+          jobDescription: jdRef.current.content,
+          jobTitle: jdRef.current.title,
         }),
       });
 
@@ -1080,18 +1152,20 @@ export default function DemoPage() {
               <div className="font-mono text-sm text-gray-500 mb-2">// scenario.demo()</div>
               <h1 className="text-3xl md:text-4xl font-bold mb-2">
                 <span className="bg-gradient-to-r from-emerald-600 via-cyan-600 to-blue-600 bg-clip-text text-transparent font-mono">
-                  Database Replication Crisis
+                  {jdTitle || 'Technical Practice Session'}
                 </span>
               </h1>
               <p className="text-gray-600 font-mono text-sm">
-                production.incident = <span className="text-red-600">CRITICAL</span>
+                language = <span className="text-emerald-600">{language.flag} {language.label}</span>
               </p>
             </div>
-            
+
             <p className="text-lg text-gray-700 mb-8 text-center">
-              You are the on-call DBA. Sarah (Product Manager) just called about an urgent issue.
+              {jdTitle
+                ? 'A realistic workplace scenario, generated from your job description.'
+                : 'Practice handling a realistic workplace situation.'}
               <br className="hidden md:block" />
-              Practice handling this production incident in English.
+              Practice speaking professional {language.label} out loud.
             </p>
 
             <div className="bg-gray-900 rounded-xl p-6 mb-8 text-left shadow-xl border border-gray-800">
@@ -1108,8 +1182,8 @@ export default function DemoPage() {
                   <span className="text-cyan-400">const</span> <span className="text-white">scenario</span> <span className="text-gray-500">=</span> <span className="text-yellow-300">{'{'}</span>{'\n'}
                   {'  '}<span className="text-emerald-400">duration</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'{isDemoMode ? '2 minutes (demo)' : '5-7 minutes'}'</span><span className="text-gray-500">,</span>{'\n'}
                   {'  '}<span className="text-emerald-400">difficulty</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'MEDIUM'</span><span className="text-gray-500">,</span>{'\n'}
-                  {'  '}<span className="text-emerald-400">role</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'Database Administrator'</span><span className="text-gray-500">,</span>{'\n'}
-                  {'  '}<span className="text-emerald-400">character</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'Sarah Chen (PM)'</span><span className="text-gray-500">,</span>{'\n'}
+                  {'  '}<span className="text-emerald-400">role</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'{jdTitle || 'Custom scenario'}'</span><span className="text-gray-500">,</span>{'\n'}
+                  {'  '}<span className="text-emerald-400">language</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'{language.label}'</span><span className="text-gray-500">,</span>{'\n'}
                   {'  '}<span className="text-emerald-400">audio</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'{isDemoMode ? 'browser TTS' : 'premium AI'}'</span><span className="text-gray-500">,</span>{'\n'}
                   {'  '}<span className="text-emerald-400">cefr_evaluation</span><span className="text-gray-500">:</span> <span className="text-purple-400">true</span><span className="text-gray-500">,</span>{'\n'}
                   {'  '}<span className="text-emerald-400">feedback</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'real-time'</span>{'\n'}

@@ -73,6 +73,16 @@ export type VocabularyUsage = {
   created_at: string;
 };
 
+export type JobDescription = {
+  id: string;
+  user_id: string;
+  company_id: string | null;
+  title: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+};
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -154,6 +164,71 @@ export async function getCompanyEmployees(companyId: string): Promise<Profile[]>
     return [];
   }
   
+  return data;
+}
+
+// ============================================
+// JOB DESCRIPTIONS
+// ============================================
+
+// Returns the JDs visible to the current user (own + company), newest first.
+// Visibility is enforced by RLS; this just orders the result.
+export async function getJobDescriptions(): Promise<JobDescription[]> {
+  const { data, error } = await supabase
+    .from('job_descriptions')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching job descriptions:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function createJobDescription(input: {
+  title: string;
+  content: string;
+  companyId?: string | null;
+}): Promise<JobDescription | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    console.error('Cannot create job description: no authenticated user');
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('job_descriptions')
+    .insert({
+      user_id: user.id,
+      company_id: input.companyId ?? null,
+      title: input.title.trim(),
+      content: input.content.trim(),
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating job description:', error);
+    return null;
+  }
+
+  return data;
+}
+
+export async function getJobDescription(id: string): Promise<JobDescription | null> {
+  const { data, error } = await supabase
+    .from('job_descriptions')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    console.error('Error fetching job description:', error);
+    return null;
+  }
+
   return data;
 }
 

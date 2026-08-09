@@ -70,6 +70,11 @@ interface GoogleTTSOptions {
   text: string;
   cefrLevel: CEFRLevel;
   lastAccents?: string[]; // For rotation
+  // Optional explicit language/voice override (used for non-English practice
+  // languages). When provided, this bypasses the English CEFR voice rotation.
+  languageCode?: string; // BCP-47, e.g. 'fr-FR', 'pt-BR'
+  voiceName?: string; // A Google Cloud TTS voice for that language
+  speakingRate?: number;
 }
 
 export async function generateSpeech(options: GoogleTTSOptions): Promise<{
@@ -77,7 +82,7 @@ export async function generateSpeech(options: GoogleTTSOptions): Promise<{
   voiceUsed: string;
   accent: string;
 }> {
-  const { text, cefrLevel, lastAccents = [] } = options;
+  const { text, cefrLevel, lastAccents = [], languageCode, voiceName, speakingRate } = options;
 
   // Check if credentials exist
   if (!process.env.GOOGLE_CLOUD_PROJECT_ID || !process.env.GOOGLE_CLOUD_PRIVATE_KEY) {
@@ -95,10 +100,10 @@ export async function generateSpeech(options: GoogleTTSOptions): Promise<{
 
   // Get voice configuration for this level
   const levelConfig = VOICE_CONFIG[cefrLevel];
-  
+
   // Select voice with rotation (avoid last 3 accents)
   let selectedVoice = levelConfig.voices[0];
-  
+
   for (const voice of levelConfig.voices) {
     if (!lastAccents.includes(voice.name)) {
       selectedVoice = voice;
@@ -106,18 +111,26 @@ export async function generateSpeech(options: GoogleTTSOptions): Promise<{
     }
   }
 
-  console.log(`🎤 [GOOGLE TTS] Level: ${cefrLevel}, Voice: ${selectedVoice.name}, Accent: ${selectedVoice.accent}`);
+  // When a non-English language/voice is explicitly requested, use it directly
+  // instead of the English CEFR voice map.
+  const useExplicitVoice = Boolean(voiceName && languageCode);
+  const finalLanguageCode = useExplicitVoice ? languageCode! : 'en-US';
+  const finalVoiceName = useExplicitVoice ? voiceName! : selectedVoice.name;
+  const finalRate = speakingRate ?? levelConfig.speed;
+  const accentLabel = useExplicitVoice ? finalVoiceName : selectedVoice.accent;
+
+  console.log(`🎤 [GOOGLE TTS] Lang: ${finalLanguageCode}, Voice: ${finalVoiceName}, Level: ${cefrLevel}`);
 
   // Construct the request
   const request = {
     input: { text },
     voice: {
-      languageCode: 'en-US',
-      name: selectedVoice.name,
+      languageCode: finalLanguageCode,
+      name: finalVoiceName,
     },
     audioConfig: {
       audioEncoding: 'MP3' as const,
-      speakingRate: levelConfig.speed,
+      speakingRate: finalRate,
       pitch: levelConfig.pitch,
     },
   };
@@ -134,8 +147,8 @@ export async function generateSpeech(options: GoogleTTSOptions): Promise<{
 
     return {
       audioContent: audioBase64,
-      voiceUsed: selectedVoice.name,
-      accent: selectedVoice.accent,
+      voiceUsed: finalVoiceName,
+      accent: accentLabel,
     };
   } catch (error) {
     console.error('❌ [GOOGLE TTS] Error:', error);

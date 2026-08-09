@@ -36,7 +36,7 @@ test.describe('SPEECK.AI Landing Page', () => {
     await page.getByText('demo.run()').click();
 
     await expect(page).toHaveURL(/.*demo/);
-    await expect(page.getByText('Start Scenario')).toBeVisible();
+    await expect(page.getByRole('button', { name: /scenario.start/i })).toBeVisible();
   });
 });
 
@@ -44,23 +44,25 @@ test.describe('SPEECK.AI Demo Page', () => {
   test('demo page loads with start button', async ({ page }) => {
     await page.goto('/demo');
 
-    await expect(page.getByRole('button', { name: /start scenario/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /scenario.start/i })).toBeVisible();
   });
 
-  test('starting scenario shows AI message', async ({ page }) => {
+  test('starting scenario shows conversation UI', async ({ page }) => {
     await page.goto('/demo');
 
-    await page.getByRole('button', { name: /start scenario/i }).click();
+    await page.getByRole('button', { name: /scenario.start/i }).click();
 
-    // Wait for AI message to appear
-    await expect(page.getByText(/database|replication|dashboard/i)).toBeVisible({ timeout: 10000 });
+    // The scenario is now generated dynamically (from the job description +
+    // language), so assert the conversation UI appears rather than any
+    // specific hardcoded text.
+    await expect(page.getByPlaceholder(/type your response/i)).toBeVisible({ timeout: 15000 });
   });
 
   test('user can send a text message', async ({ page }) => {
     await page.goto('/demo');
 
-    await page.getByRole('button', { name: /start scenario/i }).click();
-    await expect(page.getByText(/database|replication/i)).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: /scenario.start/i }).click();
+    await expect(page.getByPlaceholder(/type your response/i)).toBeVisible({ timeout: 15000 });
 
     // Type and send a message
     const input = page.getByPlaceholder(/type your response/i);
@@ -74,8 +76,8 @@ test.describe('SPEECK.AI Demo Page', () => {
   test('CEFR assessment modal appears on completion', async ({ page }) => {
     await page.goto('/demo');
 
-    await page.getByRole('button', { name: /start scenario/i }).click();
-    await expect(page.getByText(/database|replication/i)).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: /scenario.start/i }).click();
+    await expect(page.getByPlaceholder(/type your response/i)).toBeVisible({ timeout: 15000 });
 
     // Send several messages to progress the conversation
     const responses = [

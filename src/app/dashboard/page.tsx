@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase, getUserProfile, getUserConversations, getUserStats, type Profile, type Conversation, type UserStats } from '@/lib/supabase';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import PracticeSetup from '@/components/PracticeSetup';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function DashboardPage() {
   const [isUserAdmin, setIsUserAdmin] = useState(false);
   const [isManager, setIsManager] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   useEffect(() => {
     // Check for error messages from redirect
@@ -232,12 +234,12 @@ export default function DashboardPage() {
                   <p className="text-gray-500 font-mono text-sm mb-6">
                     <span className="text-gray-400">// </span>no_conversations_yet
                   </p>
-                  <Link
-                    href="/demo"
+                  <button
+                    onClick={() => setSetupOpen(true)}
                     className="inline-block px-6 py-3 bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 text-white rounded-xl font-mono font-semibold hover:shadow-xl transition-all"
                   >
                     <span>&gt; start_first_practice()</span>
-                  </Link>
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -279,12 +281,12 @@ export default function DashboardPage() {
                 <span className="text-gray-400">// </span>quick_actions
               </h3>
               <div className="space-y-3">
-                <Link
-                  href="/demo"
+                <button
+                  onClick={() => setSetupOpen(true)}
                   className="block w-full bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 text-white text-center py-3 rounded-xl font-mono font-semibold hover:shadow-xl transition-all"
                 >
                   <span>&gt; start_practice()</span>
-                </Link>
+                </button>
                 <button 
                   onClick={() => setShowHistory(!showHistory)}
                   className="block w-full glass border-2 border-gray-300 text-gray-700 text-center py-3 rounded-xl font-mono font-semibold hover:border-cyan-500 transition-all"
@@ -333,6 +335,12 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      <PracticeSetup
+        isOpen={setupOpen}
+        onClose={() => setSetupOpen(false)}
+        companyId={profile?.company_id ?? null}
+      />
     </div>
   );
 }
