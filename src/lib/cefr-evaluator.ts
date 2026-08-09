@@ -155,17 +155,17 @@ export function evaluateCEFR(
   clarificationCount: number = 0
 ): CEFRAssessment {
   
+  // Safety checks first — guard against null/undefined before any access.
+  if (!userMessages || userMessages.length === 0) {
+    console.warn('⚠️ No messages provided, returning default assessment');
+    return createDefaultAssessment();
+  }
+
   console.log('🎯 CEFR Evaluation starting...');
   console.log('  userMessages:', userMessages.length);
   console.log('  conversationLength:', conversationLength);
   console.log('  scenarioType:', scenarioType);
   console.log('  clarificationCount:', clarificationCount);
-  
-  // Safety checks
-  if (!userMessages || userMessages.length === 0) {
-    console.warn('⚠️ No messages provided, returning default assessment');
-    return createDefaultAssessment();
-  }
   
   // Calculate individual scores based on heuristics
   // In production, these would use ML models or more sophisticated analysis

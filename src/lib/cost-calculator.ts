@@ -98,7 +98,7 @@ export function projectMonthlyCost(
   
   return {
     totalCost: Number(totalCost.toFixed(2)),
-    perUserCost: Number((totalCost / totalUsers).toFixed(2)),
+    perUserCost: totalUsers > 0 ? Number((totalCost / totalUsers).toFixed(2)) : 0,
     breakdown: {
       apiCost: Number(apiCost.toFixed(2)),
       buffer: Number(buffer.toFixed(2))
