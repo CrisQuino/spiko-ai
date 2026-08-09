@@ -4,19 +4,19 @@ test.describe('SPEECK.AI Landing Page', () => {
   test('landing page loads and shows key elements', async ({ page }) => {
     await page.goto('/');
 
-    // Verify hero text
-    await expect(page.getByText('Code Your Communication')).toBeVisible();
+    // Verify hero text (appears in more than one place on the page)
+    await expect(page.getByText('Code Your Communication').first()).toBeVisible();
 
     // Verify navigation
-    await expect(page.getByText('features()')).toBeVisible();
-    await expect(page.getByText('pricing()')).toBeVisible();
+    await expect(page.getByText('features()').first()).toBeVisible();
+    await expect(page.getByText('pricing()').first()).toBeVisible();
 
     // Verify CTA buttons
-    await expect(page.getByText('start_training()')).toBeVisible();
-    await expect(page.getByText('demo.run()')).toBeVisible();
+    await expect(page.getByText('start_training()').first()).toBeVisible();
+    await expect(page.getByText('demo.run()').first()).toBeVisible();
 
-    // Verify branding
-    await expect(page.getByText('SPEECK.AI')).toBeVisible();
+    // Verify branding (appears in nav, hero and footer)
+    await expect(page.getByText('SPEECK.AI').first()).toBeVisible();
   });
 
   test('landing page features section is visible', async ({ page }) => {
@@ -33,10 +33,12 @@ test.describe('SPEECK.AI Landing Page', () => {
   test('navigation to demo page works', async ({ page }) => {
     await page.goto('/');
 
-    await page.getByText('demo.run()').click();
+    await page.getByText('demo.run()').first().click();
 
-    await expect(page).toHaveURL(/.*demo/);
-    await expect(page.getByRole('button', { name: /scenario.start/i })).toBeVisible();
+    // Use waitForURL with a navigation-length timeout so a cold /demo compile
+    // (which can be slow when routes compile in parallel) doesn't flake.
+    await page.waitForURL(/.*demo/, { timeout: 60_000 });
+    await expect(page.getByRole('button', { name: /scenario.start/i })).toBeVisible({ timeout: 30_000 });
   });
 });
 
@@ -115,7 +117,7 @@ test.describe('SPEECK.AI Auth Pages', () => {
   test('signup page loads', async ({ page }) => {
     await page.goto('/auth/signup');
 
-    await expect(page.getByText('sign up')).toBeVisible();
+    await expect(page.getByText(/signup/i).first()).toBeVisible();
   });
 });
 
