@@ -39,6 +39,8 @@ export default function DemoPage() {
   const languageRef = useRef<LanguageConfig>(getLanguage(null));
   const jdRef = useRef<{ content: string | null; title: string | null }>({ content: null, title: null });
   const [totalTokens, setTotalTokens] = useState({ input: 0, output: 0 });
+  const totalTokensRef = useRef({ input: 0, output: 0 }); // mirror to avoid stale closures at completion
+  const [scenarioTitle, setScenarioTitle] = useState<string | null>(null);
   const [quickFeedback, setQuickFeedback] = useState<string[]>([]);
   const [cefrAssessment, setCefrAssessment] = useState<CEFRAssessment | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -304,6 +306,9 @@ export default function DemoPage() {
       });
       console.log('🎯 Full assessment object:', assessment);
       
+      // Stop any audio/conversation still playing before showing the result.
+      stopAllAudio();
+
       // Show assessment IMMEDIATELY
       console.log('💾 Setting CEFR assessment state...');
       setCefrAssessment(assessment);
@@ -328,7 +333,7 @@ export default function DemoPage() {
               lessonId: currentLessonId,
               messages: currentMessages, // Send full messages array, not just user content
               durationSeconds,
-              tokenUsage: totalTokens,
+              tokenUsage: totalTokensRef.current,
               clarificationCount,
               assessment // Include the client assessment
             })
@@ -571,11 +576,16 @@ export default function DemoPage() {
 
       if (response.ok) {
         const data = await response.json();
+        if (data.title) {
+          setScenarioTitle(data.title);
+        }
         if (data.tokenUsage) {
-          setTotalTokens(prev => ({
-            input: prev.input + (data.tokenUsage.input || 0),
-            output: prev.output + (data.tokenUsage.output || 0),
-          }));
+          const next = {
+            input: totalTokensRef.current.input + (data.tokenUsage.input || 0),
+            output: totalTokensRef.current.output + (data.tokenUsage.output || 0),
+          };
+          totalTokensRef.current = next;
+          setTotalTokens(next);
         }
         if (data.message) {
           addAIMessage(data.message);
@@ -589,7 +599,27 @@ export default function DemoPage() {
     }
   };
 
+  // Hard-stop any audio playback (audio element + Web Speech) and clear the queue.
+  const stopAllAudio = () => {
+    try {
+      audioElementRef.current?.pause();
+      audioRef.current?.pause();
+    } catch {
+      // ignore — element may not be initialized yet
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsPlayingAudio(false);
+    setPendingAudioQueue(0);
+  };
+
   const addAIMessage = (content: string) => {
+    // Once the scenario is complete, don't add or speak any more AI lines.
+    if (scenarioCompletedRef.current) {
+      console.log('⏹️ Scenario completed — suppressing new AI message');
+      return;
+    }
     console.log('💬 ADDING AI MESSAGE to queue');
     setPendingAudioQueue(prev => prev + 1);
     
@@ -1022,6 +1052,11 @@ export default function DemoPage() {
   };
 
   const respondToUser = async (userMessage: string, conversationHistory: Message[]) => {
+    // Don't process a reply if the scenario already ended.
+    if (scenarioCompletedRef.current) {
+      console.log('⏹️ Scenario completed — ignoring pending user message');
+      return;
+    }
     try {
       console.log('📤 Sending to Claude with', conversationHistory.length, 'messages');
       
@@ -1045,12 +1080,14 @@ export default function DemoPage() {
       const data = await response.json();
       
       if (data.tokenUsage) {
-        setTotalTokens(prev => ({
-          input: prev.input + (data.tokenUsage.input || 0),
-          output: prev.output + (data.tokenUsage.output || 0)
-        }));
+        const next = {
+          input: totalTokensRef.current.input + (data.tokenUsage.input || 0),
+          output: totalTokensRef.current.output + (data.tokenUsage.output || 0),
+        };
+        totalTokensRef.current = next;
+        setTotalTokens(next);
       }
-      
+
       const messageCount = messages.filter(m => m.role === 'user').length + 1;
       const feedback = generateQuickFeedback(userMessage, messageCount, 'database');
       if (feedback) {
@@ -1283,7 +1320,7 @@ export default function DemoPage() {
             <div>
               <div className="flex items-center space-x-2 mb-1">
                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                <h1 className="font-mono font-bold text-lg gradient-text">Database Replication Crisis</h1>
+                <h1 className="font-mono font-bold text-lg gradient-text">{scenarioTitle || jdTitle || 'Practice Session'}</h1>
                 {isDemoMode && (
                   <span className="text-xs font-mono bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
                     DEMO

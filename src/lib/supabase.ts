@@ -122,19 +122,61 @@ export async function getCompany(companyId: string): Promise<Company | null> {
   return data;
 }
 
+// Practice sessions are persisted in `lesson_costs` (that is what the lesson
+// start/complete API writes). Map those rows onto the Conversation shape the
+// dashboard expects so stats and history reflect real activity.
+function mapLessonToConversation(l: any): Conversation {
+  const completed = !!l.completed_at;
+  const dims = [
+    l.pronunciation_score,
+    l.fluency_score,
+    l.vocabulary_score,
+    l.grammar_score,
+    l.interaction_score,
+    l.comprehension_score,
+  ].filter((n: unknown): n is number => typeof n === 'number');
+  const overall =
+    completed && dims.length > 0
+      ? Math.round(dims.reduce((a, b) => a + b, 0) / dims.length)
+      : null;
+
+  return {
+    id: l.id,
+    user_id: l.user_id,
+    company_id: null,
+    scenario_id: l.lesson_id,
+    scenario_title: l.scenario_type
+      ? l.scenario_type.charAt(0).toUpperCase() + l.scenario_type.slice(1)
+      : 'Practice',
+    difficulty: 'medium',
+    role: 'dba',
+    started_at: l.started_at,
+    completed_at: l.completed_at,
+    duration_seconds: l.duration_seconds,
+    status: completed ? 'completed' : 'in_progress',
+    progress: completed ? 100 : 0,
+    english_score: null,
+    technical_score: null,
+    communication_score: null,
+    overall_score: overall,
+    created_at: l.created_at,
+    updated_at: l.updated_at,
+  };
+}
+
 export async function getUserConversations(userId: string): Promise<Conversation[]> {
   const { data, error } = await supabase
-    .from('conversations')
+    .from('lesson_costs')
     .select('*')
     .eq('user_id', userId)
     .order('started_at', { ascending: false });
-  
+
   if (error) {
     console.error('Error fetching conversations:', error);
     return [];
   }
-  
-  return data;
+
+  return (data || []).map(mapLessonToConversation);
 }
 
 export async function getCompanyConversations(companyId: string): Promise<Conversation[]> {
