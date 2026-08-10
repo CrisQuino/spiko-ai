@@ -119,6 +119,24 @@ export default function DemoPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Stop all audio / recognition when leaving the page (navigation or unmount),
+  // so nothing keeps talking in the background after closing the session.
+  useEffect(() => {
+    return () => {
+      try {
+        audioElementRef.current?.pause();
+        audioRef.current?.pause();
+        recognitionRef.current?.stop();
+      } catch {
+        // ignore
+      }
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      voiceModeRef.current = false;
+    };
+  }, []);
   
   // Timer for elapsed time
   useEffect(() => {
@@ -610,16 +628,21 @@ export default function DemoPage() {
 
   // Hard-stop any audio playback (audio element + Web Speech) and clear the queue.
   const stopAllAudio = () => {
+    // Disable the continuous voice loop so it doesn't auto-restart recording.
+    voiceModeRef.current = false;
+    setVoiceModeActive(false);
     try {
       audioElementRef.current?.pause();
       audioRef.current?.pause();
+      recognitionRef.current?.stop();
     } catch {
-      // ignore — element may not be initialized yet
+      // ignore — element/recognition may not be initialized yet
     }
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
     setIsPlayingAudio(false);
+    setIsRecording(false);
     setPendingAudioQueue(0);
   };
 
@@ -659,9 +682,13 @@ export default function DemoPage() {
       
       // Try to use a female voice for consistency
       const voices = window.speechSynthesis.getVoices();
-      const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Victoria'));
-      if (femaleVoice) {
-        utterance.voice = femaleVoice;
+      const langPrefix = languageRef.current.bcp47.split('-')[0];
+      const langVoice = voices.find(v => (v.lang || '').toLowerCase().startsWith(langPrefix));
+      if (langVoice) {
+        utterance.voice = langVoice;
+      } else if (langPrefix === 'en') {
+        const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Victoria'));
+        if (femaleVoice) utterance.voice = femaleVoice;
       }
       
       utterance.onend = () => {
@@ -837,9 +864,13 @@ export default function DemoPage() {
       
       // Try to use a female voice for consistency
       const voices = window.speechSynthesis.getVoices();
-      const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Victoria'));
-      if (femaleVoice) {
-        utterance.voice = femaleVoice;
+      const langPrefix = languageRef.current.bcp47.split('-')[0];
+      const langVoice = voices.find(v => (v.lang || '').toLowerCase().startsWith(langPrefix));
+      if (langVoice) {
+        utterance.voice = langVoice;
+      } else if (langPrefix === 'en') {
+        const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Victoria'));
+        if (femaleVoice) utterance.voice = femaleVoice;
       }
       
       utterance.onend = () => {

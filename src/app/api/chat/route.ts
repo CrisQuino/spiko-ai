@@ -22,9 +22,17 @@ function buildSystemPrompt(opts: {
 }): string {
   const { languageName, jobDescription, jobTitle, level } = opts;
 
+  const levelGuidance: Record<string, string> = {
+    A1: 'VERY simple. Use only the most common words and SHORT sentences (max ~8 words). One idea per turn. Present tense. No idioms, no jargon unless you immediately explain it. Speak slowly and concretely.',
+    A2: 'Simple and short. Common everyday/work vocabulary, short sentences (max ~10-12 words), one or two ideas per turn. Avoid complex clauses, idioms, and dense technical jargon. If a technical term is unavoidable, explain it plainly.',
+    B1: 'Clear and moderate. Everyday and common work vocabulary, sentences of moderate length. Some connectors are fine; avoid rare or highly idiomatic expressions.',
+    B2: 'Natural professional register. Normal range and pace; idioms and technical terms are fine.',
+    C1: 'Rich, fluent, professional. Full range, nuance, and idiomatic expressions welcome.',
+    C2: 'Fully natural and sophisticated, native-like range and speed.',
+  };
   const levelBlock =
-    level && ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].includes(level)
-      ? `\nLEARNER LEVEL: The learner's ${languageName} is around CEFR ${level}. Pitch YOUR OWN language to be understandable at that level — simpler words and shorter sentences for A1/A2, richer and faster for C1/C2 — while still pushing them slightly. Do NOT lower your standards for asking clarification; just adjust vocabulary and pace.\n`
+    level && levelGuidance[level]
+      ? `\nLEARNER LEVEL — CRITICAL: The learner's ${languageName} is CEFR ${level}. Calibrate YOUR OWN speech to this level: ${levelGuidance[level]} This is about how YOU speak so they can follow — keep pushing them to be specific, but never overwhelm them with language above their level.\n`
       : '';
 
   const jdBlock = jobDescription
