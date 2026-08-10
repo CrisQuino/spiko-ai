@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { generateQuickFeedback, evaluateCEFR, type CEFRAssessment } from '@/lib/cefr-evaluator';
 import { supabase, getJobDescription } from '@/lib/supabase';
 import { getLanguage, type LanguageConfig } from '@/lib/languages';
+import { makeT } from '@/lib/i18n';
 
 type Message = {
   role: 'ai' | 'user';
@@ -1167,6 +1168,9 @@ export default function DemoPage() {
     }
   };
 
+  // Translator for the fixed UI chrome, in the selected practice language.
+  const t = makeT(language.code);
+
   if (!started) {
     return (
       <div className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
@@ -1198,7 +1202,7 @@ export default function DemoPage() {
               <div className="font-mono text-sm text-gray-500 mb-2">// scenario.demo()</div>
               <h1 className="text-3xl md:text-4xl font-bold mb-2">
                 <span className="bg-gradient-to-r from-emerald-600 via-cyan-600 to-blue-600 bg-clip-text text-transparent font-mono">
-                  {jdTitle || 'Technical Practice Session'}
+                  {jdTitle || t('title_fallback')}
                 </span>
               </h1>
               <p className="text-gray-600 font-mono text-sm">
@@ -1207,11 +1211,9 @@ export default function DemoPage() {
             </div>
 
             <p className="text-lg text-gray-700 mb-8 text-center">
-              {jdTitle
-                ? 'A realistic workplace scenario, generated from your job description.'
-                : 'Practice handling a realistic workplace situation.'}
+              {jdTitle ? t('desc_from_jd') : t('desc_generic')}
               <br className="hidden md:block" />
-              Practice speaking professional {language.label} out loud.
+              {t('practice_out_loud', { lang: language.label })}
             </p>
 
             <div className="bg-gray-900 rounded-xl p-6 mb-8 text-left shadow-xl border border-gray-800">
@@ -1243,7 +1245,7 @@ export default function DemoPage() {
               <div className="bg-gray-50 border-2 border-gray-300 rounded-xl p-4 mb-6">
                 <div className="flex items-center space-x-3">
                   <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-sm font-mono text-gray-600">Checking authentication...</p>
+                  <p className="text-sm font-mono text-gray-600">{t('checking_auth')}</p>
                 </div>
               </div>
             ) : isDemoMode ? (
@@ -1251,14 +1253,14 @@ export default function DemoPage() {
                 <div className="flex items-start space-x-3">
                   <span className="text-2xl">🎮</span>
                   <div className="flex-1">
-                    <h3 className="font-mono font-bold text-amber-900 mb-1">Demo Mode Active</h3>
+                    <h3 className="font-mono font-bold text-amber-900 mb-1">{t('demo_mode_active')}</h3>
                     <ul className="text-sm text-amber-800 space-y-1 font-mono">
-                      <li>⏱️ Limited to 2 minutes of conversation</li>
-                      <li>🔊 Basic audio quality (browser text-to-speech)</li>
-                      <li>✨ Full CEFR assessment included</li>
+                      <li>⏱️ {t('demo_bullet_time')}</li>
+                      <li>🔊 {t('demo_bullet_audio')}</li>
+                      <li>✨ {t('cefr_included')}</li>
                     </ul>
                     <p className="text-xs text-amber-700 mt-2 font-mono">
-                      <a href="/signup" className="underline font-bold hover:text-amber-900">Sign up</a> for unlimited time + premium AI voices!
+                      <a href="/signup" className="underline font-bold hover:text-amber-900">{t('signup')}</a> {t('signup_tail')}
                     </p>
                   </div>
                 </div>
@@ -1268,12 +1270,12 @@ export default function DemoPage() {
                 <div className="flex items-start space-x-3">
                   <span className="text-2xl">✨</span>
                   <div className="flex-1">
-                    <h3 className="font-mono font-bold text-emerald-900 mb-1">Full Access Mode</h3>
+                    <h3 className="font-mono font-bold text-emerald-900 mb-1">{t('full_access')}</h3>
                     <ul className="text-sm text-emerald-800 space-y-1 font-mono">
-                      <li>⏱️ Extended practice time (5+ minutes)</li>
-                      <li>🔊 Premium AI voice quality</li>
-                      <li>💾 Progress tracking & history</li>
-                      <li>✨ Full CEFR assessment included</li>
+                      <li>⏱️ {t('full_bullet_time')}</li>
+                      <li>🔊 {t('full_bullet_audio')}</li>
+                      <li>💾 {t('full_bullet_history')}</li>
+                      <li>✨ {t('cefr_included')}</li>
                     </ul>
                   </div>
                 </div>
@@ -1352,21 +1354,21 @@ export default function DemoPage() {
               {isRecording && (
                 <div className="flex items-center space-x-2 bg-red-500 text-white px-4 py-2 rounded-full animate-pulse">
                   <div className="w-3 h-3 bg-white rounded-full animate-ping"></div>
-                  <span className="font-mono text-sm font-bold">🎙 RECORDING</span>
+                  <span className="font-mono text-sm font-bold">🎙 {t('recording')}</span>
                 </div>
               )}
               
               {isPlayingAudio && (
                 <div className="flex items-center space-x-2 bg-purple-500 text-white px-4 py-2 rounded-full animate-pulse">
                   <div className="w-3 h-3 bg-white rounded-full animate-ping"></div>
-                  <span className="font-mono text-sm font-bold">🔊 PLAYING</span>
+                  <span className="font-mono text-sm font-bold">🔊 {t('playing')}</span>
                 </div>
               )}
               
               {!isRecording && !isPlayingAudio && (
                 <div className="flex items-center space-x-2 text-gray-500">
                   <div className="w-3 h-3 bg-gray-300 rounded-full"></div>
-                  <span className="font-mono text-sm">Ready</span>
+                  <span className="font-mono text-sm">{t('ready')}</span>
                 </div>
               )}
             </div>
@@ -1398,7 +1400,7 @@ export default function DemoPage() {
               <div className="bg-red-500 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center space-x-4 animate-pulse">
                 <div className="w-4 h-4 bg-white rounded-full animate-ping"></div>
                 <div className="flex flex-col">
-                  <span className="font-mono font-bold text-lg">🎙 RECORDING</span>
+                  <span className="font-mono font-bold text-lg">🎙 {t('recording')}</span>
                   <span className="font-mono text-xs opacity-90">Listening to your voice...</span>
                 </div>
               </div>
@@ -1488,7 +1490,7 @@ export default function DemoPage() {
                   value={userInput}
                   onChange={(e) => setUserInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleUserMessage()}
-                  placeholder={isRecording ? "listening... speak now" : "type your response..."}
+                  placeholder={isRecording ? t('listening') : t('your_response')}
                   className={`w-full pl-10 pr-6 py-4 glass rounded-xl font-mono text-sm focus:outline-none focus:ring-2 ${
                     isRecording 
                       ? 'ring-2 ring-red-400 border-red-300 bg-red-50/50' 
