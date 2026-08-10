@@ -9,12 +9,13 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json();
-    const { 
-      lessonId, 
-      messages, 
-      durationSeconds, 
+    const {
+      lessonId,
+      messages,
+      durationSeconds,
       tokenUsage,
-      clarificationCount = 0
+      clarificationCount = 0,
+      assessment: clientAssessment = null
     } = body;
 
     console.log('📊 [INPUT] LessonID:', lessonId);
@@ -68,16 +69,13 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Calculate CEFR assessment
-    console.log('🧮 [CEFR] Starting evaluation...');
-    const evalStart = Date.now();
-    const assessment = evaluateCEFR(
-      userMessages,
-      durationSeconds,
-      'production_incident',
-      clarificationCount
-    );
-    console.log(`✅ [CEFR] Completed in ${Date.now() - evalStart}ms`);
+    // Prefer the assessment computed by the client (LLM-based /api/evaluate);
+    // only fall back to the heuristic if none was provided.
+    let assessment = clientAssessment;
+    if (!assessment?.overall?.level) {
+      console.log('🧮 [CEFR] No client assessment, running heuristic fallback...');
+      assessment = evaluateCEFR(userMessages, durationSeconds, 'production_incident', clarificationCount);
+    }
     console.log('📊 [CEFR] Overall:', assessment.overall.level);
 
     // Calculate costs - map the token format correctly

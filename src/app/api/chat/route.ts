@@ -18,8 +18,14 @@ function buildSystemPrompt(opts: {
   languageName: string;
   jobDescription?: string | null;
   jobTitle?: string | null;
+  level?: string | null;
 }): string {
-  const { languageName, jobDescription, jobTitle } = opts;
+  const { languageName, jobDescription, jobTitle, level } = opts;
+
+  const levelBlock =
+    level && ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].includes(level)
+      ? `\nLEARNER LEVEL: The learner's ${languageName} is around CEFR ${level}. Pitch YOUR OWN language to be understandable at that level — simpler words and shorter sentences for A1/A2, richer and faster for C1/C2 — while still pushing them slightly. Do NOT lower your standards for asking clarification; just adjust vocabulary and pace.\n`
+      : '';
 
   const jdBlock = jobDescription
     ? `THE LEARNER'S JOB DESCRIPTION${jobTitle ? ` — TITLE: "${jobTitle}"` : ''}:
@@ -39,7 +45,7 @@ MATCH THE SENIORITY AND SCOPE OF THE ROLE (critical):
   return `You are role-playing a realistic workplace colleague or stakeholder in a live conversation. Your goal is to help the learner PRACTICE speaking professional, technical ${languageName} for their actual job.
 
 ${jdBlock}
-
+${levelBlock}
 LANGUAGE (CRITICAL):
 - Speak ONLY in ${languageName}. Every single response must be in ${languageName}.
 - Use natural, realistic workplace ${languageName} — the way a real colleague would talk on a call or chat.
@@ -72,6 +78,7 @@ export async function POST(request: Request) {
       language = 'en',
       jobDescription = null,
       jobTitle = null,
+      level = null,
     } = body;
 
     const lang = getLanguage(language);
@@ -81,6 +88,7 @@ export async function POST(request: Request) {
       languageName: lang.promptName,
       jobDescription,
       jobTitle,
+      level,
     });
 
     // Normalize incoming messages to the provider-agnostic format.

@@ -20,6 +20,7 @@ export default function PracticeSetup({ isOpen, onClose, companyId }: Props) {
   const router = useRouter();
 
   const [language, setLanguage] = useState<LanguageCode>(DEFAULT_LANGUAGE);
+  const [level, setLevel] = useState<string>(''); // '' = not sure / auto
   const [jds, setJds] = useState<JobDescription[]>([]);
   const [selectedJdId, setSelectedJdId] = useState<string>('');
   const [loadingJds, setLoadingJds] = useState(true);
@@ -86,6 +87,7 @@ export default function PracticeSetup({ isOpen, onClose, companyId }: Props) {
       return;
     }
     const params = new URLSearchParams({ lang: language, jd: selectedJdId });
+    if (level) params.set('level', level);
     router.push(`/demo?${params.toString()}`);
   };
 
@@ -144,10 +146,35 @@ export default function PracticeSetup({ isOpen, onClose, companyId }: Props) {
                 </div>
               </div>
 
+              {/* Level */}
+              <div>
+                <label className="block text-sm font-mono font-bold text-gray-700 mb-2">
+                  <span className="text-gray-400">2. </span>level <span className="text-gray-400 font-normal">(CEFR)</span>
+                </label>
+                <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                  {['', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'].map((lv) => (
+                    <button
+                      key={lv || 'auto'}
+                      onClick={() => setLevel(lv)}
+                      className={`py-2 rounded-xl border-2 font-mono text-sm transition-all ${
+                        level === lv
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                          : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                      }`}
+                    >
+                      {lv || 'auto'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-500 font-mono mt-1">
+                  // adapts scenario difficulty; the assessment stays objective
+                </p>
+              </div>
+
               {/* Job description */}
               <div>
                 <label className="block text-sm font-mono font-bold text-gray-700 mb-2">
-                  <span className="text-gray-400">2. </span>job_description
+                  <span className="text-gray-400">3. </span>job_description
                 </label>
 
                 {loadingJds ? (

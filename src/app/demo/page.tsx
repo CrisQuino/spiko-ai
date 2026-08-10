@@ -38,11 +38,13 @@ export default function DemoPage() {
   // Refs mirror the config so async callbacks never read a stale value.
   const languageRef = useRef<LanguageConfig>(getLanguage(null));
   const jdRef = useRef<{ content: string | null; title: string | null }>({ content: null, title: null });
+  const levelRef = useRef<string | null>(null); // selected CEFR level ('' = auto)
   const [totalTokens, setTotalTokens] = useState({ input: 0, output: 0 });
   const totalTokensRef = useRef({ input: 0, output: 0 }); // mirror to avoid stale closures at completion
   const [scenarioTitle, setScenarioTitle] = useState<string | null>(null);
   const [quickFeedback, setQuickFeedback] = useState<string[]>([]);
   const [cefrAssessment, setCefrAssessment] = useState<CEFRAssessment | null>(null);
+  const [evaluating, setEvaluating] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [pendingAudioQueue, setPendingAudioQueue] = useState(0);
   const [clarificationCount, setClarificationCount] = useState(0);
@@ -141,6 +143,8 @@ export default function DemoPage() {
     const lang = getLanguage(params.get('lang'));
     setLanguage(lang);
     languageRef.current = lang;
+
+    levelRef.current = params.get('level');
 
     const jdId = params.get('jd');
     if (jdId) {
@@ -283,33 +287,36 @@ export default function DemoPage() {
       console.log('  Total tokens:', totalTokens);
       console.log('  Clarifications needed:', clarificationCount);
       
-      // ✅ CLIENT-SIDE EVALUATION (Instantaneous!)
-      console.log('🧮 Starting CEFR evaluation...');
-      const evalStart = Date.now();
-      
-      const assessment = evaluateCEFR(
-        userMessages,
-        durationSeconds,
-        'production_incident',
-        clarificationCount
-      );
-      
-      const evalTime = Date.now() - evalStart;
-      
-      console.log(`✅ Assessment calculated in ${evalTime}ms`);
-      console.log('📊 Results:', {
-        level: assessment.overall.level,
-        score: assessment.overall.score,
-        fluency: assessment.fluency.score,
-        vocabulary: assessment.vocabulary.score,
-        technicalJargon: assessment.technicalJargon.level
-      });
-      console.log('🎯 Full assessment object:', assessment);
-      
       // Stop any audio/conversation still playing before showing the result.
       stopAllAudio();
+      setEvaluating(true);
 
-      // Show assessment IMMEDIATELY
+      // Rigorous, language-aware CEFR evaluation via the LLM, with the heuristic
+      // evaluator as a safety fallback if the call fails.
+      console.log('🧮 Requesting LLM CEFR evaluation...');
+      let assessment: CEFRAssessment;
+      try {
+        const evalRes = await fetch('/api/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: currentMessages,
+            language: languageRef.current.code,
+            level: levelRef.current,
+          }),
+        });
+        if (!evalRes.ok) throw new Error(`evaluate ${evalRes.status}`);
+        const evalData = await evalRes.json();
+        assessment = evalData.assessment;
+        console.log('✅ Assessment source:', evalData.source, '→', assessment.overall.level, assessment.overall.score);
+      } catch (e) {
+        console.warn('⚠️ LLM evaluation failed, using heuristic fallback:', e);
+        assessment = evaluateCEFR(userMessages, durationSeconds, 'production_incident', clarificationCount);
+      }
+
+      setEvaluating(false);
+
+      // Show assessment
       console.log('💾 Setting CEFR assessment state...');
       setCefrAssessment(assessment);
       console.log('✅ CEFR assessment state set!');
@@ -571,6 +578,7 @@ export default function DemoPage() {
           language: languageRef.current.code,
           jobDescription: jdRef.current.content,
           jobTitle: jdRef.current.title,
+          level: levelRef.current,
         }),
       });
 
@@ -1070,6 +1078,7 @@ export default function DemoPage() {
           language: languageRef.current.code,
           jobDescription: jdRef.current.content,
           jobTitle: jdRef.current.title,
+          level: levelRef.current,
         }),
       });
 
@@ -1658,7 +1667,7 @@ export default function DemoPage() {
                     <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     <p className="text-gray-500 font-mono text-sm mb-4">// calculating_assessment()</p>
                     <p className="text-xs text-gray-400 mb-4 font-mono">
-                      ⏳ Evaluating your performance...
+                      {evaluating ? '⏳ Grading your language against CEFR…' : '⏳ Evaluating your performance...'}
                     </p>
                   </div>
                 )}
