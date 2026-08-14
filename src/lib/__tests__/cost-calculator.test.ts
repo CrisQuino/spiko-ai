@@ -17,9 +17,9 @@ describe('calculateCost', () => {
       totalTokens: 1_000_000,
     });
 
-    expect(result.inputCost).toBe(0.003);
+    expect(result.inputCost).toBe(3);
     expect(result.outputCost).toBe(0);
-    expect(result.totalCost).toBe(0.003);
+    expect(result.totalCost).toBe(3);
   });
 
   it('calculates cost for 1M output tokens correctly', () => {
@@ -30,8 +30,8 @@ describe('calculateCost', () => {
     });
 
     expect(result.inputCost).toBe(0);
-    expect(result.outputCost).toBe(0.015);
-    expect(result.totalCost).toBe(0.015);
+    expect(result.outputCost).toBe(15);
+    expect(result.totalCost).toBe(15);
   });
 
   it('calculates mixed input/output costs', () => {
@@ -41,9 +41,9 @@ describe('calculateCost', () => {
       totalTokens: 800_000,
     });
 
-    expect(result.inputCost).toBe(0.0015); // 500k * $3/M
-    expect(result.outputCost).toBe(0.0045); // 300k * $15/M
-    expect(result.totalCost).toBe(0.006);
+    expect(result.inputCost).toBe(1.5); // 500k * $3/M
+    expect(result.outputCost).toBe(4.5); // 300k * $15/M
+    expect(result.totalCost).toBe(6);
   });
 
   it('returns zero for zero tokens', () => {

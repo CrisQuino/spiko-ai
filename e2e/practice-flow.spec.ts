@@ -56,10 +56,19 @@ async function finalizeSession(messages: Array<{ role: string; content: string }
   const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
   const started = await (await fetch(`${BASE}/api/lesson/start`, { method: 'POST', headers: auth, body: JSON.stringify({ scenarioType: scenarioTitle, demoMode: false }) })).json();
   const evalRes = await (await fetch(`${BASE}/api/evaluate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, language }) })).json();
+
+  // Estimate token usage (the real counts live in the browser and aren't
+  // captured here): the system prompt + JD (~1500 tok) is sent each AI turn,
+  // plus the growing conversation history.
+  const aiTurns = messages.filter((m) => m.role === 'ai').length;
+  const chars = messages.reduce((s, m) => s + m.content.length, 0);
+  const input = aiTurns * 1500 + Math.ceil(chars / 4);
+  const output = Math.ceil(messages.filter((m) => m.role === 'ai').reduce((s, m) => s + m.content.length, 0) / 4);
+
   await fetch(`${BASE}/api/lesson/complete`, {
     method: 'POST',
     headers: auth,
-    body: JSON.stringify({ lessonId: started.lessonId, messages, durationSeconds: 180, tokenUsage: { input: 0, output: 0 }, assessment: evalRes.assessment, scenarioTitle }),
+    body: JSON.stringify({ lessonId: started.lessonId, messages, durationSeconds: 180, tokenUsage: { input, output }, assessment: evalRes.assessment, scenarioTitle }),
   });
   return started.lessonId as string;
 }
