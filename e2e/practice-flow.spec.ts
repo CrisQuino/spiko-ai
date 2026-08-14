@@ -149,13 +149,41 @@ async function say(page: Page, text: string) {
 
 const MATRIX = [
   { label: 'EN @ B2 · Director (leadership)', lang: /English/, code: 'en', level: 'B2', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'English',
-    turns: ['Thanks for flagging this. What exactly is going wrong and which teams are affected?', 'Understood. I will align the team leads and set an incident commander.'] },
+    turns: [
+      'Thanks for flagging this. What exactly is going wrong, and which teams and customers are affected right now?',
+      'Understood. I want an incident commander named in the next five minutes, and I will align the team leads so we are not duplicating effort.',
+      'Let us keep the customer-facing communication honest but calm — draft a status update and I will review it before it goes out.',
+      'What is our current hypothesis on the root cause, and do we have a safe rollback if the fix does not hold?',
+      'Good. Once we are stable, I want a blameless postmortem with clear action items and owners by the end of the week.',
+      'Thank you all for the fast response. Please get some rest, and we will regroup tomorrow morning to review the follow-ups.',
+    ] },
   { label: 'FR @ A2 · Director (leadership)', lang: /Français/, code: 'fr', level: 'A2', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'French',
-    turns: ['Bonjour. Quel est le problème exactement ?', 'D accord. Je vais parler avec les chefs d équipe.'] },
+    turns: [
+      'Bonjour. Quel est le problème exactement ?',
+      'D accord. Quelles équipes sont touchées ?',
+      'Je vais parler avec les chefs d équipe maintenant.',
+      'Est-ce que les clients voient le problème aussi ?',
+      'Bien. Nous devons écrire un petit message pour les clients.',
+      'Merci beaucoup pour votre travail. On se parle demain matin.',
+    ] },
   { label: 'PT @ B1 · Director (leadership)', lang: /Português/, code: 'pt', level: 'B1', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'Portuguese',
-    turns: ['Olá. Qual é o problema exatamente?', 'Certo. Vou alinhar com os líderes de equipe e definir prioridades.'] },
+    turns: [
+      'Olá. Qual é o problema exatamente e quais equipes estão afetadas?',
+      'Entendi. Vou alinhar com os líderes de equipe e definir um responsável pelo incidente.',
+      'Precisamos avisar os clientes com clareza, mas sem causar pânico.',
+      'Qual é a nossa hipótese para a causa, e temos como voltar atrás se o conserto não funcionar?',
+      'Ótimo. Depois de estabilizar, quero uma análise do incidente com ações e responsáveis.',
+      'Obrigado a todos pela resposta rápida. Vamos conversar amanhã de manhã.',
+    ] },
   { label: 'EN @ B2 · Backend Engineer (IC)', lang: /English/, code: 'en', level: 'B2', jd: 'Backend Engineer', seniority: 'ic' as const, language: 'English',
-    turns: ['Let me check. What error are you seeing and in which endpoint?', 'I will look at the logs and the slow query, then patch it.'] },
+    turns: [
+      'Let me check. What error are you seeing, and in which endpoint or service is it happening?',
+      'Okay, I will pull the logs and trace the failing request to see where the exception is thrown.',
+      'It looks like a slow database query is timing out under load — I will add an index and review the N+1 pattern.',
+      'I will write a regression test that reproduces the timeout before I ship the fix, so we do not hit it again.',
+      'Once the test passes locally, I will deploy to staging, watch the latency metrics, and then roll it out to production.',
+      'The fix is out and latency is back to normal. I will keep an eye on the dashboards for the next hour just in case.',
+    ] },
 ];
 
 test.describe('Practice flow — JD/level semantic checks', () => {

@@ -12,6 +12,8 @@ Assess RIGOROUSLY and HONESTLY against official CEFR descriptors. Do NOT inflate
 
 What you CAN judge from a transcript: vocabulary range/precision, grammatical range/accuracy, coherence/cohesion, interaction, and task achievement. You CANNOT truly hear pronunciation or fluency — estimate those conservatively from sentence construction and hesitation markers, and never rate them above the overall.
 
+EVIDENCE SUFFICIENCY IS MANDATORY. A reliable CEFR judgement needs enough language to observe. If the learner produced only a couple of short turns (roughly fewer than 4 turns or under ~40 words total), you DO NOT have enough evidence to confidently assign a band: pick the most cautious level the samples clearly support, keep scores near the LOW end of that band, and state plainly in the feedback that the sample is too small for a confident rating and that a longer conversation is needed. Never let two correct short sentences justify B2+.
+
 ${targetLevel ? `The learner self-reported level ${targetLevel}. Use it only as a reference; judge what the transcript actually shows (it may be higher or lower).` : ''}
 
 Base every score on EVIDENCE from the transcript. In feedback, cite specific examples (quote short fragments) and give concrete, actionable next steps. Write ALL feedback text in ${languageName}.
@@ -80,11 +82,17 @@ export async function POST(request: Request) {
     }
 
     const transcript = userMessages.map((m, i) => `${i + 1}. ${m}`).join('\n');
+    const wordCount = userMessages.join(' ').trim().split(/\s+/).filter(Boolean).length;
 
     const result = await chatComplete({
       provider: resolveProvider(),
       system: buildRubricPrompt(lang.promptName, level),
-      messages: [{ role: 'user', content: `Learner transcript (their ${lang.promptName} turns only):\n\n${transcript}` }],
+      messages: [
+        {
+          role: 'user',
+          content: `Learner transcript (their ${lang.promptName} turns only). Sample size: ${userMessages.length} turn(s), ~${wordCount} words — apply the evidence-sufficiency rule accordingly.\n\n${transcript}`,
+        },
+      ],
       maxTokens: 900,
     });
 
