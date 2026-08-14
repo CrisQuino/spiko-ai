@@ -35,6 +35,34 @@ const BASE = 'http://localhost:3000';
 
 const EMAIL = process.env.E2E_EMAIL || 'spiko-e2e@example.com';
 const PASSWORD = process.env.E2E_PASSWORD || 'Test-e2e-Passw0rd!';
+const SUPABASE_URL = ENV.NEXT_PUBLIC_SUPABASE_URL || '';
+const ANON_KEY = ENV.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+// Persist a completed session (transcript + real CEFR evaluation) so it can be
+// reviewed in the app at /dashboard/session/<id> (log in as the test user).
+let cachedToken: string | null = null;
+async function testUserToken(): Promise<string> {
+  if (cachedToken) return cachedToken;
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { apikey: ANON_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+  });
+  cachedToken = (await res.json()).access_token;
+  return cachedToken!;
+}
+async function finalizeSession(messages: Array<{ role: string; content: string }>, language: string, scenarioTitle: string) {
+  const token = await testUserToken();
+  const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const started = await (await fetch(`${BASE}/api/lesson/start`, { method: 'POST', headers: auth, body: JSON.stringify({ scenarioType: scenarioTitle, demoMode: false }) })).json();
+  const evalRes = await (await fetch(`${BASE}/api/evaluate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, language }) })).json();
+  await fetch(`${BASE}/api/lesson/complete`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ lessonId: started.lessonId, messages, durationSeconds: 180, tokenUsage: { input: 0, output: 0 }, assessment: evalRes.assessment, scenarioTitle }),
+  });
+  return started.lessonId as string;
+}
 
 const LEVEL_INDEX: Record<string, number> = { A1: 0, A2: 1, B1: 2, B2: 3, C1: 4, C2: 5 };
 
@@ -111,13 +139,13 @@ async function say(page: Page, text: string) {
 }
 
 const MATRIX = [
-  { label: 'EN @ B2 · Director (leadership)', lang: /English/, level: 'B2', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'English',
+  { label: 'EN @ B2 · Director (leadership)', lang: /English/, code: 'en', level: 'B2', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'English',
     turns: ['Thanks for flagging this. What exactly is going wrong and which teams are affected?', 'Understood. I will align the team leads and set an incident commander.'] },
-  { label: 'FR @ A2 · Director (leadership)', lang: /Français/, level: 'A2', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'French',
+  { label: 'FR @ A2 · Director (leadership)', lang: /Français/, code: 'fr', level: 'A2', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'French',
     turns: ['Bonjour. Quel est le problème exactement ?', 'D accord. Je vais parler avec les chefs d équipe.'] },
-  { label: 'PT @ B1 · Director (leadership)', lang: /Português/, level: 'B1', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'Portuguese',
+  { label: 'PT @ B1 · Director (leadership)', lang: /Português/, code: 'pt', level: 'B1', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'Portuguese',
     turns: ['Olá. Qual é o problema exatamente?', 'Certo. Vou alinhar com os líderes de equipe e definir prioridades.'] },
-  { label: 'EN @ B2 · Backend Engineer (IC)', lang: /English/, level: 'B2', jd: 'Backend Engineer', seniority: 'ic' as const, language: 'English',
+  { label: 'EN @ B2 · Backend Engineer (IC)', lang: /English/, code: 'en', level: 'B2', jd: 'Backend Engineer', seniority: 'ic' as const, language: 'English',
     turns: ['Let me check. What error are you seeing and in which endpoint?', 'I will look at the logs and the slow query, then patch it.'] },
 ];
 
@@ -131,13 +159,21 @@ test.describe('Practice flow — JD/level semantic checks', () => {
       await expect(responseInput(page)).toBeVisible({ timeout: 20_000 });
       await expect.poll(() => bubbles(page).count(), { timeout: 45_000 }).toBeGreaterThan(0);
 
-      const parts: string[] = [(await bubbles(page).first().innerText()).trim()];
+      const opener = (await bubbles(page).first().innerText()).trim();
+      const full: Array<{ role: string; content: string }> = [{ role: 'ai', content: opener }];
+      const parts: string[] = [opener];
       for (const turn of m.turns) {
         await say(page, turn);
-        parts.push((await bubbles(page).last().innerText()).trim());
+        const reply = (await bubbles(page).last().innerText()).trim();
+        full.push({ role: 'user', content: turn }, { role: 'ai', content: reply });
+        parts.push(reply);
       }
       const transcript = parts.join('\n---\n');
       console.log(`\n===== ${m.label} =====\n${transcript}\n`);
+
+      // Persist a reviewable session (transcript + real evaluation).
+      const sessionId = await finalizeSession(full, m.code, `${m.jd} — ${m.level} (${m.code.toUpperCase()})`);
+      console.log(`REVIEW ${m.label}: /dashboard/session/${sessionId}`);
 
       // Structural sanity always runs (free/deterministic).
       expect(transcript.length, 'scenario produced a non-trivial transcript').toBeGreaterThan(30);

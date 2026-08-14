@@ -164,6 +164,48 @@ function mapLessonToConversation(l: any): Conversation {
   };
 }
 
+export type TranscriptMessage = { role: 'user' | 'ai'; content: string; timestamp?: number };
+
+export type LessonDetail = {
+  lesson_id: string;
+  user_id: string;
+  scenario_type: string | null;
+  scenario_title: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number | null;
+  total_tokens: number | null;
+  total_cost: number | null;
+  cefr_overall: string | null;
+  pronunciation_level: string | null; pronunciation_score: number | null;
+  fluency_level: string | null; fluency_score: number | null;
+  vocabulary_level: string | null; vocabulary_score: number | null;
+  grammar_level: string | null; grammar_score: number | null;
+  interaction_level: string | null; interaction_score: number | null;
+  comprehension_level: string | null; comprehension_score: number | null;
+  technical_accuracy_level: string | null;
+  technical_terms_used: string[] | null;
+  quick_feedback: string[] | null;
+  final_feedback: string | null;
+  transcript: TranscriptMessage[] | null;
+};
+
+// Fetch a single practice session by its lesson_id (RLS: own sessions, plus all
+// for admins). Used by the session-detail page.
+export async function getLessonDetail(lessonId: string): Promise<LessonDetail | null> {
+  const { data, error } = await supabase
+    .from('lesson_costs')
+    .select('*')
+    .eq('lesson_id', lessonId)
+    .single();
+
+  if (error) {
+    console.error('Error fetching lesson detail:', error);
+    return null;
+  }
+  return data as LessonDetail;
+}
+
 export async function getUserConversations(userId: string): Promise<Conversation[]> {
   const { data, error } = await supabase
     .from('lesson_costs')

@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
           completed_at: new Date().toISOString(),
           duration_seconds: durationSeconds,
           ...(scenarioTitle ? { scenario_title: scenarioTitle } : {}),
+          ...(Array.isArray(messages) ? { transcript: messages } : {}),
           total_tokens: tokenUsageForCalculation.totalTokens,
           input_tokens: tokenUsageForCalculation.inputTokens,
           output_tokens: tokenUsageForCalculation.outputTokens,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import {
   getKPIMetrics,
@@ -350,9 +351,13 @@ export default function AdminDashboard() {
                     {lesson.email || lesson.full_name || (lesson.user_id ? `${lesson.user_id.slice(0, 8)}…` : '—')}
                   </td>
                   <td className="py-3 px-4">
-                    <span className="tech-badge-emerald text-xs">
-                      {lesson.scenario_title || lesson.scenario_type}
-                    </span>
+                    <Link
+                      href={`/dashboard/session/${lesson.lesson_id}`}
+                      className="tech-badge-emerald text-xs hover:underline"
+                      title="Review this session"
+                    >
+                      {lesson.scenario_title || lesson.scenario_type} →
+                    </Link>
                   </td>
                   <td className="py-3 px-4 font-mono text-sm text-gray-600">
                     {Math.floor((lesson.duration_seconds || 0) / 60)}:{String((lesson.duration_seconds || 0) % 60).padStart(2, '0')}

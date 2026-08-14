@@ -244,23 +244,34 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-3">
                   {conversations.map((conv, i) => (
-                    <div key={i} className="glass rounded-xl p-4 hover:shadow-lg transition-all border border-gray-200/50">
+                    <Link
+                      key={i}
+                      href={`/dashboard/session/${conv.scenario_id}`}
+                      className="block glass rounded-xl p-4 hover:shadow-lg hover:border-cyan-400 transition-all border border-gray-200/50"
+                    >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <p className="font-mono text-sm font-bold text-gray-800">
-                            {conv.scenario_title || 'Database Crisis'}
+                            {conv.scenario_title || 'Practice session'}
                           </p>
                           <p className="font-mono text-xs text-gray-500 mt-1">
-                            <span className="text-emerald-600">{conv.started_at || 'Today'}</span>
+                            <span className="text-emerald-600">
+                              {conv.started_at ? new Date(conv.started_at).toLocaleDateString() : 'Today'}
+                            </span>
                             <span className="mx-2">•</span>
-                            <span>{conv.duration_seconds || '5m'}</span>
+                            <span>
+                              {conv.duration_seconds
+                                ? `${Math.floor(conv.duration_seconds / 60)}:${(conv.duration_seconds % 60).toString().padStart(2, '0')}`
+                                : '—'}
+                            </span>
+                            <span className="mx-2 text-gray-300">→ review</span>
                           </p>
                         </div>
                         <div className="tech-badge-cyan">
-                          {conv.overall_score || 'B2'}
+                          {conv.overall_score || '—'}
                         </div>
                       </div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}
