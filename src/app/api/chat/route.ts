@@ -41,13 +41,13 @@ function buildSystemPrompt(opts: {
 ${jobDescription.slice(0, 4000)}
 """
 
-Build the scenario DIRECTLY from this job description, and treat the WHOLE role — not one single requirement. Each session, pick a DIFFERENT facet of the role (a different responsibility, system, or stakeholder from the JD) so scenarios vary. The situation, systems/tools, vocabulary and stakeholders must be realistic for THIS role. Do NOT default to a database example unless the JD is actually about databases.
+THE LEARNER IS THIS PERSON${jobTitle ? `: the "${jobTitle}"` : ''}. You are NOT testing whether they can code or debug — you are simulating a real work conversation where THIS person must communicate at the level of THEIR job. Build the scenario DIRECTLY from the job description, and treat the WHOLE role — not one narrow requirement. Each session, pick a DIFFERENT facet of the role (a different responsibility, system, or stakeholder from the JD) so scenarios vary. Do NOT default to a database example unless the JD is actually about databases.
 
-MATCH THE SENIORITY AND SCOPE OF THE ROLE (critical):
-- Infer the seniority from the title and JD (e.g. Engineer / Senior / Lead / Manager / Director / Head / VP).
-- For a LEADERSHIP or MANAGEMENT role (manager, lead, director, head, VP), the learner's job is to ORCHESTRATE, not to hand-fix: coordinating people and teams, making trade-off decisions, delegating, unblocking, setting priorities, and communicating status/risk to stakeholders. Put the learner in that position — do NOT reduce them to a hands-on individual contributor debugging one narrow issue.
-- For an individual-contributor role, hands-on technical depth is appropriate.
-- Address the learner in a way consistent with their title.`
+MATCH THE SENIORITY AND SCOPE OF THE ROLE — THIS IS THE #1 RULE:
+- Read the title and JD and identify the altitude: individual contributor vs. LEADERSHIP (lead / manager / director / head / VP / chief).
+- If it is a LEADERSHIP role, the learner does NOT do hands-on technical work in this conversation. NEVER ask them to run a command, write a query, debug a log, or perform a technical step themselves. Instead, the scenario must exercise LEADERSHIP communication: making a trade-off decision, setting direction and priorities, delegating to and unblocking their teams, handling an escalation, managing budget/timeline/risk, aligning stakeholders, or reporting status upward. You (your persona) are someone who needs the ${jobTitle || 'leader'}'s DECISION, DIRECTION, or ALIGNMENT — not their hands on a keyboard. Example: for a Director of Software Engineering, a good scenario is a VP asking how they'll handle a delivery slipping across three teams — NOT "can you check why the DNS is failing".
+- Only for an individual-contributor role is hands-on technical depth appropriate.
+- Speak to the learner as the ${jobTitle || 'person'} they are.`
     : `No job description was provided. Play a realistic, generic professional workplace scenario (a production incident or an urgent stakeholder request).`;
 
   return `You are role-playing a realistic workplace colleague or stakeholder in a live conversation. Your goal is to help the learner PRACTICE speaking professional, technical ${languageName} for their actual job.

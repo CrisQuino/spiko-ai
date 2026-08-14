@@ -145,9 +145,9 @@ function mapLessonToConversation(l: any): Conversation {
     user_id: l.user_id,
     company_id: null,
     scenario_id: l.lesson_id,
-    scenario_title: l.scenario_type
-      ? l.scenario_type.charAt(0).toUpperCase() + l.scenario_type.slice(1)
-      : 'Practice',
+    scenario_title:
+      l.scenario_title ||
+      (l.scenario_type ? l.scenario_type.charAt(0).toUpperCase() + l.scenario_type.slice(1) : 'Practice'),
     difficulty: 'medium',
     role: 'dba',
     started_at: l.started_at,

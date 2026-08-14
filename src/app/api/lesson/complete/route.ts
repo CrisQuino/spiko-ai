@@ -15,7 +15,8 @@ export async function POST(request: NextRequest) {
       durationSeconds,
       tokenUsage,
       clarificationCount = 0,
-      assessment: clientAssessment = null
+      assessment: clientAssessment = null,
+      scenarioTitle = null
     } = body;
 
     console.log('📊 [INPUT] LessonID:', lessonId);
@@ -109,6 +110,7 @@ export async function POST(request: NextRequest) {
         .update({
           completed_at: new Date().toISOString(),
           duration_seconds: durationSeconds,
+          ...(scenarioTitle ? { scenario_title: scenarioTitle } : {}),
           total_tokens: tokenUsageForCalculation.totalTokens,
           input_tokens: tokenUsageForCalculation.inputTokens,
           output_tokens: tokenUsageForCalculation.outputTokens,

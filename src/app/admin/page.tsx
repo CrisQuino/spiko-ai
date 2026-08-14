@@ -332,6 +332,7 @@ export default function AdminDashboard() {
             <thead>
               <tr className="border-b border-gray-300">
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Date</th>
+                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">User</th>
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Scenario</th>
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Duration</th>
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">CEFR</th>
@@ -345,9 +346,12 @@ export default function AdminDashboard() {
                   <td className="py-3 px-4 font-mono text-sm">
                     {new Date(lesson.completed_at).toLocaleDateString()}
                   </td>
+                  <td className="py-3 px-4 font-mono text-sm text-gray-700">
+                    {lesson.email || lesson.full_name || (lesson.user_id ? `${lesson.user_id.slice(0, 8)}…` : '—')}
+                  </td>
                   <td className="py-3 px-4">
                     <span className="tech-badge-emerald text-xs">
-                      {lesson.scenario_type}
+                      {lesson.scenario_title || lesson.scenario_type}
                     </span>
                   </td>
                   <td className="py-3 px-4 font-mono text-sm text-gray-600">
@@ -371,7 +375,7 @@ export default function AdminDashboard() {
               
               {recentLessons.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-gray-500 font-mono text-sm">
+                  <td colSpan={7} className="py-8 text-center text-gray-500 font-mono text-sm">
                     // no_lessons_yet
                   </td>
                 </tr>

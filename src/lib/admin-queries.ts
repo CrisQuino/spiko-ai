@@ -123,40 +123,28 @@ export async function getCEFRDistribution(): Promise<CEFRDistribution[]> {
  * Calculate KPI metrics for dashboard
  */
 export async function getKPIMetrics(): Promise<KPIMetrics> {
-  // Get current month data
+  // Read from the admin aggregate views (owned by postgres → they see ALL
+  // users, bypassing the per-user RLS on lesson_costs).
   const now = new Date();
-  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  
-  const { data: monthData } = await supabase
-    .from('lesson_costs')
-    .select('total_cost, user_id, total_tokens')
-    .gte('completed_at', firstDayOfMonth.toISOString())
-    .not('completed_at', 'is', null);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const currentMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
-  // Get today's data
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  const { data: todayData } = await supabase
-    .from('lesson_costs')
-    .select('*')
-    .gte('completed_at', today.toISOString())
-    .not('completed_at', 'is', null);
+  const { data: monthly } = await supabase.from('admin_monthly_costs').select('*');
+  const m: any = (monthly || []).find((r: any) => r.month === currentMonth);
 
-  const totalCostMonth = monthData?.reduce((sum, item) => sum + Number(item.total_cost), 0) || 0;
-  const activeUsers = new Set(monthData?.map(item => item.user_id) || []).size;
-  const lessonsToday = todayData?.length || 0;
-  const totalLessonsMonth = monthData?.length || 0;
-  const avgCostPerLesson = totalLessonsMonth > 0 ? totalCostMonth / totalLessonsMonth : 0;
-  const totalTokensMonth = monthData?.reduce((sum, item) => sum + (item.total_tokens || 0), 0) || 0;
+  const { data: daily } = await supabase.from('admin_daily_costs').select('*');
+  const d: any = (daily || []).find((r: any) => String(r.date).startsWith(todayStr));
+
+  const totalCostMonth = Number(m?.total_cost || 0);
 
   return {
-    totalCostMonth: Number(totalCostMonth.toFixed(2)),
-    activeUsers,
-    lessonsToday,
-    avgCostPerLesson: Number(avgCostPerLesson.toFixed(4)),
-    totalLessonsMonth,
-    totalTokensMonth,
+    totalCostMonth: Number(totalCostMonth.toFixed(4)),
+    activeUsers: Number(m?.unique_users || 0),
+    lessonsToday: Number(d?.lessons_count || 0),
+    avgCostPerLesson: Number(Number(m?.avg_cost_per_lesson || 0).toFixed(6)),
+    totalLessonsMonth: Number(m?.lessons_count || 0),
+    totalTokensMonth: Number(m?.total_tokens || 0),
   };
 }
 
@@ -178,21 +166,11 @@ export async function isAdmin(): Promise<boolean> {
  * Get recent lessons with details
  */
 export async function getRecentLessons(limit: number = 20) {
+  // admin_recent_lessons is a postgres-owned view (bypasses RLS) that joins the
+  // user's email/name, so the admin sees every user's sessions.
   const { data, error } = await supabase
-    .from('lesson_costs')
-    .select(`
-      id,
-      lesson_id,
-      scenario_type,
-      completed_at,
-      duration_seconds,
-      total_cost,
-      total_tokens,
-      cefr_overall,
-      user_id
-    `)
-    .not('completed_at', 'is', null)
-    .order('completed_at', { ascending: false })
+    .from('admin_recent_lessons')
+    .select('*')
     .limit(limit);
 
   if (error) {

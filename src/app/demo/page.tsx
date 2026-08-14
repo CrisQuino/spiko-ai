@@ -43,6 +43,7 @@ export default function DemoPage() {
   const [totalTokens, setTotalTokens] = useState({ input: 0, output: 0 });
   const totalTokensRef = useRef({ input: 0, output: 0 }); // mirror to avoid stale closures at completion
   const [scenarioTitle, setScenarioTitle] = useState<string | null>(null);
+  const scenarioTitleRef = useRef<string | null>(null);
   const [quickFeedback, setQuickFeedback] = useState<string[]>([]);
   const [cefrAssessment, setCefrAssessment] = useState<CEFRAssessment | null>(null);
   const [evaluating, setEvaluating] = useState(false);
@@ -361,7 +362,8 @@ export default function DemoPage() {
               durationSeconds,
               tokenUsage: totalTokensRef.current,
               clarificationCount,
-              assessment // Include the client assessment
+              assessment, // Include the client assessment
+              scenarioTitle: scenarioTitleRef.current
             })
           })
             .then(response => {
@@ -605,6 +607,7 @@ export default function DemoPage() {
         const data = await response.json();
         if (data.title) {
           setScenarioTitle(data.title);
+          scenarioTitleRef.current = data.title;
         }
         if (data.tokenUsage) {
           const next = {
@@ -1657,8 +1660,18 @@ export default function DemoPage() {
                     <div className="grid md:grid-cols-2 gap-4 mb-8 text-left">
                       <div className="glass rounded-xl p-4 border border-gray-200/50">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-mono text-gray-600">CEFR Level</span>
-                          <span className="text-2xl font-mono font-bold gradient-text">{cefrAssessment.overall.level}</span>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-mono text-gray-600">Your level</span>
+                            {levelRef.current && (
+                              <span className="text-[11px] font-mono text-gray-400">target: {levelRef.current}</span>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <span className="text-2xl font-mono font-bold gradient-text">{cefrAssessment.overall.level}</span>
+                            {levelRef.current && levelRef.current !== cefrAssessment.overall.level && (
+                              <span className="block text-[11px] font-mono text-gray-400">was aiming for {levelRef.current}</span>
+                            )}
+                          </div>
                         </div>
                         <p className="text-xs text-gray-500">{cefrAssessment.overall.description}</p>
                       </div>
