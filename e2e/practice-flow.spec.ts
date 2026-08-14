@@ -184,6 +184,39 @@ const MATRIX = [
       'Once the test passes locally, I will deploy to staging, watch the latency metrics, and then roll it out to production.',
       'The fix is out and latency is back to normal. I will keep an eye on the dashboards for the next hour just in case.',
     ] },
+  // Very simple, correct A1 language — checks the AI keeps ITS OWN speech short
+  // and simple at A1, and that A1-quality is graded near A1.
+  { label: 'EN @ A1 · Backend Engineer (IC)', lang: /English/, code: 'en', level: 'A1', jd: 'Backend Engineer', seniority: 'ic' as const, language: 'English',
+    turns: [
+      'Hello. What is the problem?',
+      'Okay. Which part is broken?',
+      'I look at the code now.',
+      'I think the server is down.',
+      'I restart the server. Is it okay?',
+      'Good. Thank you. Bye.',
+    ] },
+  // BELOW TARGET: target C1 but the learner writes error-laden, A2-ish English
+  // (typos + broken grammar). Should be graded well BELOW C1.
+  { label: 'EN @ C1 target · Backend IC · UNDER-target (errors+typos)', lang: /English/, code: 'en', level: 'C1', jd: 'Backend Engineer', seniority: 'ic' as const, language: 'English',
+    turns: [
+      'helo. what is problm in the sistem?',
+      'ok i look the log. maybe the databse is slow i think',
+      'i not sure but i try fix it. i add index maybe',
+      'the query is very slow when many user come. i dont know why exactly',
+      'i think we need more server. or maybe cache. i not sure',
+      'ok i do my best. sorry my english is not so good',
+    ] },
+  // BELOW TARGET: target B2 but broken, A1/A2-ish French. Should be graded well
+  // BELOW B2.
+  { label: 'FR @ B2 target · Director · UNDER-target (errors+typos)', lang: /Français/, code: 'fr', level: 'B2', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'French',
+    turns: [
+      'bonjour. le probleme est quoi ?',
+      'ah oui. beaucoup client fache je pense',
+      'je parle avec le equipe mais je sais pas comment',
+      'le client il peut pas payer. c est tres mauvais',
+      'je fais un petit message mais mon francais pas bon',
+      'merci. a demain. desole pour le francais',
+    ] },
 ];
 
 test.describe('Practice flow — JD/level semantic checks', () => {

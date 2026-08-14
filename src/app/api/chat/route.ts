@@ -22,17 +22,21 @@ function buildSystemPrompt(opts: {
 }): string {
   const { languageName, jobDescription, jobTitle, level } = opts;
 
+  // Each level sets a HARD cap on how long and complex YOUR turn is, plus how
+  // many questions you may ask at once. Lower levels = shorter sentences and a
+  // SINGLE simple question, so the input never runs above the learner's level.
   const levelGuidance: Record<string, string> = {
-    A1: 'VERY simple. Use only the most common words and SHORT sentences (max ~8 words). One idea per turn. Present tense. No idioms, no jargon unless you immediately explain it. Speak slowly and concretely.',
-    A2: 'Simple and short. Common everyday/work vocabulary, short sentences (max ~10-12 words), one or two ideas per turn. Avoid complex clauses, idioms, and dense technical jargon. If a technical term is unavoidable, explain it plainly.',
-    B1: 'Clear and moderate. Everyday and common work vocabulary, sentences of moderate length. Some connectors are fine; avoid rare or highly idiomatic expressions.',
-    B2: 'Natural professional register. Normal range and pace; idioms and technical terms are fine.',
-    C1: 'Rich, fluent, professional. Full range, nuance, and idiomatic expressions welcome.',
+    A1: 'ONE short sentence (max ~8 words), then AT MOST ONE very simple question. Only the most common words, present tense. No idioms, no jargon, no complex clauses. Never stack two questions. Speak slowly and concretely.',
+    A2: '1–2 short sentences (max ~10-12 words EACH), then AT MOST ONE simple question. Common everyday/work words only. No complex or subordinate clauses, no idioms, no dense jargon. NEVER ask several things in one turn. If a technical term is unavoidable, explain it plainly.',
+    B1: '2 sentences of moderate length, then ONE clear question. Common work vocabulary; simple connectors are fine; avoid rare or highly idiomatic expressions. At most one question per turn.',
+    B2: 'Natural professional register. 2–3 sentences at normal pace; idioms and technical terms are fine; a focused follow-up question is fine.',
+    C1: 'Rich, fluent, professional. Full range, nuance, and idiomatic expressions welcome; you may probe with layered questions.',
     C2: 'Fully natural and sophisticated, native-like range and speed.',
   };
   const levelBlock =
     level && levelGuidance[level]
-      ? `\nLEARNER LEVEL — CRITICAL: The learner's ${languageName} is CEFR ${level}. Calibrate YOUR OWN speech to this level: ${levelGuidance[level]} This is about how YOU speak so they can follow — keep pushing them to be specific, but never overwhelm them with language above their level.\n`
+      ? `\nLEARNER LEVEL — CRITICAL, OVERRIDES EVERYTHING BELOW: The learner's ${languageName} is CEFR ${level}. Calibrate YOUR OWN speech to this exact level: ${levelGuidance[level]}
+This controls HOW you speak so the learner can follow. It takes PRECEDENCE over the general "concise" and "clarification" instructions below: at lower levels you STILL push the learner to be specific, but you do it with SHORT, SIMPLE sentences and ONE question at a time — never overwhelm them with language above their level. An A2 turn must look clearly shorter and simpler than a C1 turn.\n`
       : '';
 
   const jdBlock = jobDescription
@@ -61,7 +65,7 @@ LANGUAGE (CRITICAL):
 STAY IN CHARACTER:
 1. Pick a believable persona (name + role) appropriate to the scenario and stay in character.
 2. You have the problem/need; the LEARNER helps at the altitude of THEIR role (see seniority above). Respond naturally and contextually to what they JUST said — acknowledge their answer before moving on.
-3. Keep responses concise (2-3 sentences max). Show appropriate urgency but stay professional.
+3. Keep responses concise. Default to 2-3 sentences max — but if a LEARNER LEVEL is set above, ITS length limit wins (e.g. A1/A2 = shorter). Show appropriate urgency but stay professional.
 
 DIALOGUE ONLY:
 - Speak ONLY in direct dialogue. NO stage directions, NO actions like *looks worried*, no narration.
@@ -71,6 +75,7 @@ MANDATORY CLARIFICATION (this is the core of the practice):
 - NEVER assume or fill in gaps. If they give a number without context, ask which metric, which unit, which system.
 - NEVER accept one-word or partial answers ("yes", "there is", "I checked it") — ask what specifically, what the value is, what they found.
 - Ask "how", "what", and "why" frequently. Make them be specific and detailed. Ask them to verify their findings.
+- MATCH THE CLARIFICATION TO THE LEARNER LEVEL: at low levels (A1/A2) ask ONE short, simple clarification question at a time — do NOT stack multiple questions or use complex phrasing. Higher levels can take layered questions.
 
 FLOW:
 - Open the scenario, describe symptoms/needs, guide investigation, reach a diagnosis, plan and implement a fix, then verify. Take your time on each step and make the learner explain thoroughly.
@@ -114,7 +119,7 @@ export async function POST(request: Request) {
         role: 'user',
         content: `Start the practice now. Open with ${angle}.
 First, output ONE line exactly in the form "TITLE: <a 3-6 word scenario title in ${lang.promptName}>".
-Then, on the next line, speak your opening line in character — introduce yourself and describe the situation (spoken dialogue only, in ${lang.promptName}).`,
+Then, on the next line, speak your opening line in character — introduce yourself and describe the situation (spoken dialogue only, in ${lang.promptName}).${level ? ` Keep this opening at the learner's CEFR ${level} level: honor the length/complexity limit above (for A1/A2, a short, simple greeting + situation in a couple of short sentences — not a long paragraph).` : ''}`,
       });
     }
 
