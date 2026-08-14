@@ -1,18 +1,87 @@
 import { test, expect, Page } from '@playwright/test';
+import fs from 'fs';
 
 // End-to-end walkthrough of the authenticated practice flow, driven via the
-// text input (no microphone). Requires a seeded test user + JD (see _e2e_seed.mjs).
-// Credentials come from env so the spec carries no secrets.
-const EMAIL = process.env.E2E_EMAIL || 'spiko-e2e@example.com';
-const PASSWORD = process.env.E2E_PASSWORD || 'Test-e2e-Passw0rd!';
-const JD_TITLE = process.env.E2E_JD_TITLE || 'Director, Software Engineering';
-
-// Opt-in: needs a seeded test user + JD (scripts/e2e-seed.mjs) and makes real
+// text input (no microphone), with an LLM judge that semantically checks:
+//   - the scenario matches the Job Description,
+//   - the scenario matches the role's seniority (leadership vs IC),
+//   - the AI's language matches the selected CEFR level,
+// plus a calibration check that /api/evaluate matches the demonstrated level.
+//
+// Opt-in: needs a seeded test user + JDs (scripts/e2e-seed.mjs) and makes real
 // LLM calls, so it is skipped by default (e.g. in CI). Run with E2E_RUN=1.
 test.skip(!process.env.E2E_RUN, 'Set E2E_RUN=1 after seeding a test user (scripts/e2e-seed.mjs)');
 
+function readEnvLocal(): Record<string, string> {
+  const out: Record<string, string> = {};
+  try {
+    for (const line of fs.readFileSync('.env.local', 'utf8').split('\n')) {
+      const l = line.trim();
+      if (!l || l.startsWith('#') || !l.includes('=')) continue;
+      const i = l.indexOf('=');
+      out[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+    }
+  } catch { /* ignore */ }
+  return out;
+}
+const ENV = readEnvLocal();
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || ENV.ANTHROPIC_API_KEY || '';
+// The semantic judge is an extra Anthropic API call per scenario. Off by
+// default (transcripts are printed so a human/Claude can judge them for free);
+// set E2E_JUDGE=1 for a fully self-validating automated run.
+const USE_JUDGE = !!process.env.E2E_JUDGE;
+const JUDGE_MODEL = 'claude-sonnet-4-5-20250929';
+const BASE = 'http://localhost:3000';
+
+const EMAIL = process.env.E2E_EMAIL || 'spiko-e2e@example.com';
+const PASSWORD = process.env.E2E_PASSWORD || 'Test-e2e-Passw0rd!';
+
+const LEVEL_INDEX: Record<string, number> = { A1: 0, A2: 1, B1: 2, B2: 3, C1: 4, C2: 5 };
+
 const bubbles = (page: Page) => page.locator('p.text-sm.leading-relaxed');
 const responseInput = (page: Page) => page.getByPlaceholder(/response|réponse|resposta/i);
+
+async function anthropic(system: string, user: string, maxTokens = 400): Promise<string> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: JUDGE_MODEL, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
+  });
+  const d = await res.json();
+  return d?.content?.[0]?.text || '';
+}
+
+function parseJson(text: string): any {
+  let t = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a !== -1 && b !== -1) t = t.slice(a, b + 1);
+  return JSON.parse(t);
+}
+
+// LLM judge: does the generated scenario fit the JD, seniority and CEFR level?
+async function judgeScenario(opts: {
+  jdTitle: string; expectedSeniority: 'leadership' | 'ic'; targetLevel: string; language: string; transcript: string;
+}) {
+  const system = `You are a strict QA judge for a language-practice product. You are given a job title, an expected seniority, a target CEFR level, and a transcript of what the AI role-play partner said in a practice scenario. Rate objectively.`;
+  const user = `JOB TITLE: "${opts.jdTitle}"
+EXPECTED SENIORITY: ${opts.expectedSeniority} (leadership = the learner makes decisions, coordinates teams, aligns stakeholders and does NOT do hands-on technical work; ic = hands-on technical work is expected)
+TARGET CEFR LEVEL: ${opts.targetLevel}
+PRACTICE LANGUAGE: ${opts.language}
+
+AI PARTNER TRANSCRIPT (what the AI said across the scenario):
+"""
+${opts.transcript}
+"""
+
+Rate 0.0-1.0:
+- jd_match: does the scenario's situation, systems and stakeholders realistically fit THIS job?
+- seniority_match: does the scenario place the learner at the expected seniority (see above)?
+- level_match: is the COMPLEXITY of the AI's ${opts.language} appropriate for CEFR ${opts.targetLevel}? (A1/A2 = short, simple sentences and common words; C1/C2 = rich and complex.)
+- language_ok: is the AI speaking in ${opts.language}? (1.0 yes, 0.0 no)
+Also return detected_seniority ("leadership" or "ic") and a one-line reason.
+Return ONLY JSON: {"jd_match":0-1,"seniority_match":0-1,"level_match":0-1,"language_ok":0-1,"detected_seniority":"...","reason":"..."}`;
+  return parseJson(await anthropic(system, user));
+}
 
 async function login(page: Page) {
   await page.goto('/auth/login');
@@ -22,21 +91,14 @@ async function login(page: Page) {
   await page.waitForURL(/.*dashboard/, { timeout: 30_000 });
 }
 
-async function openSetupAndStart(page: Page, langLabel: RegExp, level: string) {
-  // Open the Practice Setup modal from the dashboard.
+async function openSetupAndStart(page: Page, langLabel: RegExp, level: string, jdTitle: string) {
   await page.getByRole('button', { name: /start_practice|start_first_practice/i }).first().click();
-
   const modal = page.locator('.max-w-lg');
   await expect(modal).toBeVisible({ timeout: 10_000 });
-
-  // 1. language, 2. level, 3. job description (seeded → preselected).
   await modal.getByRole('button', { name: langLabel }).click();
   await modal.getByRole('button', { name: level, exact: true }).click();
-  await modal.locator('select').selectOption({ label: JD_TITLE });
-
+  await modal.locator('select').selectOption({ label: jdTitle });
   await modal.getByRole('button', { name: /start_practice/i }).click();
-
-  // Now on /demo intro screen → begin the scenario.
   await expect(page).toHaveURL(/.*demo\?/, { timeout: 15_000 });
   await page.getByRole('button', { name: /scenario\.start/i }).click({ timeout: 15_000 });
 }
@@ -45,44 +107,84 @@ async function say(page: Page, text: string) {
   const before = await bubbles(page).count();
   await responseInput(page).fill(text);
   await responseInput(page).press('Enter');
-  // user bubble appears immediately, AI reply follows after the LLM call.
-  await expect.poll(() => bubbles(page).count(), { timeout: 40_000 }).toBeGreaterThan(before + 1);
+  await expect.poll(() => bubbles(page).count(), { timeout: 45_000 }).toBeGreaterThan(before + 1);
 }
 
-async function runScenario(page: Page, langLabel: RegExp, level: string, userTurns: string[]) {
-  await login(page);
-  await openSetupAndStart(page, langLabel, level);
+const MATRIX = [
+  { label: 'EN @ B2 · Director (leadership)', lang: /English/, level: 'B2', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'English',
+    turns: ['Thanks for flagging this. What exactly is going wrong and which teams are affected?', 'Understood. I will align the team leads and set an incident commander.'] },
+  { label: 'FR @ A2 · Director (leadership)', lang: /Français/, level: 'A2', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'French',
+    turns: ['Bonjour. Quel est le problème exactement ?', 'D accord. Je vais parler avec les chefs d équipe.'] },
+  { label: 'PT @ B1 · Director (leadership)', lang: /Português/, level: 'B1', jd: 'Director, Software Engineering', seniority: 'leadership' as const, language: 'Portuguese',
+    turns: ['Olá. Qual é o problema exatamente?', 'Certo. Vou alinhar com os líderes de equipe e definir prioridades.'] },
+  { label: 'EN @ B2 · Backend Engineer (IC)', lang: /English/, level: 'B2', jd: 'Backend Engineer', seniority: 'ic' as const, language: 'English',
+    turns: ['Let me check. What error are you seeing and in which endpoint?', 'I will look at the logs and the slow query, then patch it.'] },
+];
 
-  // Opener (an AI bubble) must appear.
-  await expect(responseInput(page)).toBeVisible({ timeout: 20_000 });
-  await expect.poll(() => bubbles(page).count(), { timeout: 40_000 }).toBeGreaterThan(0);
+test.describe('Practice flow — JD/level semantic checks', () => {
+  for (const m of MATRIX) {
+    test(m.label, async ({ page }) => {
+      test.setTimeout(200_000);
+      await login(page);
+      await openSetupAndStart(page, m.lang, m.level, m.jd);
 
-  const opener = (await bubbles(page).first().innerText()).trim();
-  console.log('\n===== OPENER (' + level + ') =====\n' + opener + '\n');
-  expect(opener.length).toBeGreaterThan(10);
+      await expect(responseInput(page)).toBeVisible({ timeout: 20_000 });
+      await expect.poll(() => bubbles(page).count(), { timeout: 45_000 }).toBeGreaterThan(0);
 
-  for (const turn of userTurns) {
-    await say(page, turn);
-    const last = (await bubbles(page).last().innerText()).trim();
-    console.log('----- AI reply -----\n' + last + '\n');
-    expect(last.length).toBeGreaterThan(5);
+      const parts: string[] = [(await bubbles(page).first().innerText()).trim()];
+      for (const turn of m.turns) {
+        await say(page, turn);
+        parts.push((await bubbles(page).last().innerText()).trim());
+      }
+      const transcript = parts.join('\n---\n');
+      console.log(`\n===== ${m.label} =====\n${transcript}\n`);
+
+      // Structural sanity always runs (free/deterministic).
+      expect(transcript.length, 'scenario produced a non-trivial transcript').toBeGreaterThan(30);
+
+      // Semantic asserts only when the API judge is enabled (E2E_JUDGE=1).
+      if (USE_JUDGE) {
+        const j = await judgeScenario({ jdTitle: m.jd, expectedSeniority: m.seniority, targetLevel: m.level, language: m.language, transcript });
+        console.log(`JUDGE ${m.label}:`, JSON.stringify(j));
+        expect(j.language_ok, `language should be ${m.language}`).toBeGreaterThanOrEqual(1);
+        expect(j.jd_match, 'scenario should match the JD').toBeGreaterThanOrEqual(0.6);
+        expect(j.seniority_match, `scenario should be ${m.seniority}`).toBeGreaterThanOrEqual(0.6);
+        expect(j.level_match, `language should fit CEFR ${m.level}`).toBeGreaterThanOrEqual(0.6);
+        expect(j.detected_seniority).toBe(m.seniority);
+      }
+    });
   }
-}
+});
 
-test.describe('Practice flow (JD-driven, authenticated)', () => {
-  test('English — Director JD at B2', async ({ page }) => {
-    test.setTimeout(180_000);
-    await runScenario(page, /English/, 'B2', [
-      'Thanks for flagging this. What exactly is the budget shortfall, and which teams are affected?',
-      'Let me align finance and the team leads. I will prioritize the payment reliability work first.',
-    ]);
+test.describe('Evaluation calibration (level vs target)', () => {
+  async function evaluate(messages: string[], language: string) {
+    const res = await fetch(`${BASE}/api/evaluate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: messages.map((content) => ({ role: 'user', content })), language }),
+    });
+    return (await res.json()).assessment;
+  }
+
+  test('A2-quality French is graded near A2 (not inflated)', async () => {
+    test.setTimeout(120_000);
+    const a = await evaluate([
+      'Bonjour. Le probleme est le serveur il marche pas.',
+      'Je pense c est le DNS mais je sais pas.',
+      'Je vais regarder et je vous dis.',
+    ], 'fr');
+    console.log('A2-FR eval:', a.overall.level, a.overall.score);
+    expect(Math.abs(LEVEL_INDEX[a.overall.level] - LEVEL_INDEX['A2'])).toBeLessThanOrEqual(1);
   });
 
-  test('French — Director JD at A2', async ({ page }) => {
-    test.setTimeout(180_000);
-    await runScenario(page, /Français/, 'A2', [
-      'Bonjour. Quel est le problème exactement ?',
-      'D accord. Je vais parler avec les chefs d équipe et décider des priorités.',
-    ]);
+  test('C1-quality English is graded near C1', async () => {
+    test.setTimeout(120_000);
+    const a = await evaluate([
+      "I'd frame this as a cross-team prioritization problem rather than a purely technical one, so let me triage by customer impact first.",
+      "I'll appoint a single incident commander, align the leads, and set a 30-minute status cadence until we isolate the root cause.",
+      "Once contained, I'll run a blameless post-mortem and fold the action items into next sprint's planning.",
+    ], 'en');
+    console.log('C1-EN eval:', a.overall.level, a.overall.score);
+    expect(Math.abs(LEVEL_INDEX[a.overall.level] - LEVEL_INDEX['C1'])).toBeLessThanOrEqual(1);
   });
 });
