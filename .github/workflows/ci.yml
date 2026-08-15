@@ -25,7 +25,11 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        # `npm install` (not `npm ci`) tolerates the platform-specific optional
+        # wasm resolver binding (@unrs/resolver-binding-wasm32-wasi → @emnapi)
+        # whose nested versions can't be regenerated deterministically on
+        # Windows; it repairs the lock in place the same way Vercel's build does.
+        run: npm install --no-audit --no-fund
 
       - name: Run ESLint
         run: npm run lint
@@ -61,7 +65,11 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        # `npm install` (not `npm ci`) tolerates the platform-specific optional
+        # wasm resolver binding (@unrs/resolver-binding-wasm32-wasi → @emnapi)
+        # whose nested versions can't be regenerated deterministically on
+        # Windows; it repairs the lock in place the same way Vercel's build does.
+        run: npm install --no-audit --no-fund
 
       - name: Build Next.js app
         run: npm run build
@@ -90,7 +98,11 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        # `npm install` (not `npm ci`) tolerates the platform-specific optional
+        # wasm resolver binding (@unrs/resolver-binding-wasm32-wasi → @emnapi)
+        # whose nested versions can't be regenerated deterministically on
+        # Windows; it repairs the lock in place the same way Vercel's build does.
+        run: npm install --no-audit --no-fund
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
