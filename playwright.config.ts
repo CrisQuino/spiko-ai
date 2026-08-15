@@ -10,11 +10,17 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
+  // The dev server compiles routes on demand, so the first navigation to each
+  // route can be slow; give it generous timeouts to avoid cold-compile flakes.
+  timeout: 90_000,
+  expect: { timeout: 15_000 },
   reporter: 'html',
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    navigationTimeout: 60_000,
+    actionTimeout: 15_000,
   },
   projects: [
     {

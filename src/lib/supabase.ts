@@ -73,6 +73,16 @@ export type VocabularyUsage = {
   created_at: string;
 };
 
+export type JobDescription = {
+  id: string;
+  user_id: string;
+  company_id: string | null;
+  title: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+};
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
@@ -112,19 +122,103 @@ export async function getCompany(companyId: string): Promise<Company | null> {
   return data;
 }
 
+// Practice sessions are persisted in `lesson_costs` (that is what the lesson
+// start/complete API writes). Map those rows onto the Conversation shape the
+// dashboard expects so stats and history reflect real activity.
+function mapLessonToConversation(l: any): Conversation {
+  const completed = !!l.completed_at;
+  const dims = [
+    l.pronunciation_score,
+    l.fluency_score,
+    l.vocabulary_score,
+    l.grammar_score,
+    l.interaction_score,
+    l.comprehension_score,
+  ].filter((n: unknown): n is number => typeof n === 'number');
+  const overall =
+    completed && dims.length > 0
+      ? Math.round(dims.reduce((a, b) => a + b, 0) / dims.length)
+      : null;
+
+  return {
+    id: l.id,
+    user_id: l.user_id,
+    company_id: null,
+    scenario_id: l.lesson_id,
+    scenario_title:
+      l.scenario_title ||
+      (l.scenario_type ? l.scenario_type.charAt(0).toUpperCase() + l.scenario_type.slice(1) : 'Practice'),
+    difficulty: 'medium',
+    role: 'dba',
+    started_at: l.started_at,
+    completed_at: l.completed_at,
+    duration_seconds: l.duration_seconds,
+    status: completed ? 'completed' : 'in_progress',
+    progress: completed ? 100 : 0,
+    english_score: null,
+    technical_score: null,
+    communication_score: null,
+    overall_score: overall,
+    created_at: l.created_at,
+    updated_at: l.updated_at,
+  };
+}
+
+export type TranscriptMessage = { role: 'user' | 'ai'; content: string; timestamp?: number };
+
+export type LessonDetail = {
+  lesson_id: string;
+  user_id: string;
+  scenario_type: string | null;
+  scenario_title: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number | null;
+  total_tokens: number | null;
+  total_cost: number | null;
+  cefr_overall: string | null;
+  pronunciation_level: string | null; pronunciation_score: number | null;
+  fluency_level: string | null; fluency_score: number | null;
+  vocabulary_level: string | null; vocabulary_score: number | null;
+  grammar_level: string | null; grammar_score: number | null;
+  interaction_level: string | null; interaction_score: number | null;
+  comprehension_level: string | null; comprehension_score: number | null;
+  technical_accuracy_level: string | null;
+  technical_terms_used: string[] | null;
+  quick_feedback: string[] | null;
+  final_feedback: string | null;
+  transcript: TranscriptMessage[] | null;
+};
+
+// Fetch a single practice session by its lesson_id (RLS: own sessions, plus all
+// for admins). Used by the session-detail page.
+export async function getLessonDetail(lessonId: string): Promise<LessonDetail | null> {
+  const { data, error } = await supabase
+    .from('lesson_costs')
+    .select('*')
+    .eq('lesson_id', lessonId)
+    .single();
+
+  if (error) {
+    console.error('Error fetching lesson detail:', error);
+    return null;
+  }
+  return data as LessonDetail;
+}
+
 export async function getUserConversations(userId: string): Promise<Conversation[]> {
   const { data, error } = await supabase
-    .from('conversations')
+    .from('lesson_costs')
     .select('*')
     .eq('user_id', userId)
     .order('started_at', { ascending: false });
-  
+
   if (error) {
     console.error('Error fetching conversations:', error);
     return [];
   }
-  
-  return data;
+
+  return (data || []).map(mapLessonToConversation);
 }
 
 export async function getCompanyConversations(companyId: string): Promise<Conversation[]> {
@@ -154,6 +248,71 @@ export async function getCompanyEmployees(companyId: string): Promise<Profile[]>
     return [];
   }
   
+  return data;
+}
+
+// ============================================
+// JOB DESCRIPTIONS
+// ============================================
+
+// Returns the JDs visible to the current user (own + company), newest first.
+// Visibility is enforced by RLS; this just orders the result.
+export async function getJobDescriptions(): Promise<JobDescription[]> {
+  const { data, error } = await supabase
+    .from('job_descriptions')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching job descriptions:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function createJobDescription(input: {
+  title: string;
+  content: string;
+  companyId?: string | null;
+}): Promise<JobDescription | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    console.error('Cannot create job description: no authenticated user');
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('job_descriptions')
+    .insert({
+      user_id: user.id,
+      company_id: input.companyId ?? null,
+      title: input.title.trim(),
+      content: input.content.trim(),
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating job description:', error);
+    return null;
+  }
+
+  return data;
+}
+
+export async function getJobDescription(id: string): Promise<JobDescription | null> {
+  const { data, error } = await supabase
+    .from('job_descriptions')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    console.error('Error fetching job description:', error);
+    return null;
+  }
+
   return data;
 }
 

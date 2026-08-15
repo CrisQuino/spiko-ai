@@ -18,10 +18,13 @@ export interface CostBreakdown {
 
 // Claude Sonnet 4 Pricing (as of Jan 2025)
 // Source: https://www.anthropic.com/pricing
+// Dollars per 1M tokens. calculateCost divides token counts by 1_000_000, so
+// these must be the per-million rate (previously 0.003/0.015, which undercounted
+// cost by 1000x). Claude Sonnet 4.5: $3 / $15 per 1M in/out.
 const CLAUDE_PRICING = {
-  model: 'claude-sonnet-4-20250514',
-  input: 0.003,   // $3 per 1M input tokens
-  output: 0.015   // $15 per 1M output tokens
+  model: 'claude-sonnet-4-5-20250929',
+  input: 3,    // $3 per 1M input tokens
+  output: 15,  // $15 per 1M output tokens
 } as const;
 
 /**
@@ -98,7 +101,7 @@ export function projectMonthlyCost(
   
   return {
     totalCost: Number(totalCost.toFixed(2)),
-    perUserCost: Number((totalCost / totalUsers).toFixed(2)),
+    perUserCost: totalUsers > 0 ? Number((totalCost / totalUsers).toFixed(2)) : 0,
     breakdown: {
       apiCost: Number(apiCost.toFixed(2)),
       buffer: Number(buffer.toFixed(2))

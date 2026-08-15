@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateSpeech, type CEFRLevel } from '@/lib/google-tts';
 import { getCachedAudio, setCachedAudio } from '@/lib/audio-cache';
 import { getCachedAudio as getCachedAudioFS, setCachedAudio as setCachedAudioFS } from '@/lib/fs-cache';
+import { getLanguage } from '@/lib/languages';
 
 // Configuration
 const USE_GOOGLE_TTS_FOR_FREE_TIER = process.env.NEXT_PUBLIC_FREE_TIER_GOOGLE_TTS === 'true';
@@ -12,8 +13,10 @@ export async function POST(request: Request) {
   const startTime = Date.now();
   
   try {
-    const { text, cefrLevel = 'B2', lastAccents = [], isFreeUser = false } = await request.json();
-    console.log(`🔊 [TTS] Request: "${text.substring(0, 50)}...", Level: ${cefrLevel}, Free: ${isFreeUser}`);
+    const { text, cefrLevel = 'B2', lastAccents = [], isFreeUser = false, language = 'en' } = await request.json();
+    const lang = getLanguage(language);
+    const isEnglish = lang.code === 'en';
+    console.log(`🔊 [TTS] Request: "${text.substring(0, 50)}...", Lang: ${lang.code}, Level: ${cefrLevel}, Free: ${isFreeUser}`);
     console.log(`📦 [TTS] Cache strategy: ${USE_FILESYSTEM_CACHE ? 'filesystem' : 'browser (default)'}`);
 
     if (!text) {
@@ -22,18 +25,22 @@ export async function POST(request: Request) {
 
     // Decide which TTS to use
     const shouldUseGoogleTTS = GOOGLE_TTS_ENABLED && (!isFreeUser || USE_GOOGLE_TTS_FOR_FREE_TIER);
-    
+
     if (!shouldUseGoogleTTS) {
       console.log('⚠️ [TTS] Using browser TTS fallback (free user or Google TTS disabled)');
-      return NextResponse.json({ 
+      return NextResponse.json({
         fallback: true,
         reason: isFreeUser ? 'Free tier uses browser TTS' : 'Google TTS not configured'
       }, { status: 200 });
     }
 
-    // Get voice config
-    const voiceConfig = await import('@/lib/google-tts').then(m => m.getVoiceConfig(cefrLevel as CEFRLevel));
-    const primaryVoice = voiceConfig.voices[0].name;
+    // Cache key voice: English rotates by CEFR level; other languages use the
+    // fixed per-language voice.
+    let primaryVoice = lang.ttsVoice;
+    if (isEnglish) {
+      const voiceConfig = await import('@/lib/google-tts').then(m => m.getVoiceConfig(cefrLevel as CEFRLevel));
+      primaryVoice = voiceConfig.voices[0].name;
+    }
     
     // Check cache based on strategy
     let cached = null;
@@ -69,7 +76,10 @@ export async function POST(request: Request) {
     const result = await generateSpeech({
       text,
       cefrLevel: cefrLevel as CEFRLevel,
-      lastAccents
+      lastAccents,
+      // For non-English languages, force the language voice; English keeps the
+      // CEFR-based accent rotation.
+      ...(isEnglish ? {} : { languageCode: lang.bcp47, voiceName: lang.ttsVoice, speakingRate: lang.ttsRate }),
     });
     
     const googleTime = Date.now() - googleStart;

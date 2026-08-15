@@ -4,19 +4,19 @@ test.describe('SPEECK.AI Landing Page', () => {
   test('landing page loads and shows key elements', async ({ page }) => {
     await page.goto('/');
 
-    // Verify hero text
-    await expect(page.getByText('Code Your Communication')).toBeVisible();
+    // Verify hero text (appears in more than one place on the page)
+    await expect(page.getByText('Code Your Communication').first()).toBeVisible();
 
     // Verify navigation
-    await expect(page.getByText('features()')).toBeVisible();
-    await expect(page.getByText('pricing()')).toBeVisible();
+    await expect(page.getByText('features()').first()).toBeVisible();
+    await expect(page.getByText('pricing()').first()).toBeVisible();
 
     // Verify CTA buttons
-    await expect(page.getByText('start_training()')).toBeVisible();
-    await expect(page.getByText('demo.run()')).toBeVisible();
+    await expect(page.getByText('start_training()').first()).toBeVisible();
+    await expect(page.getByText('demo.run()').first()).toBeVisible();
 
-    // Verify branding
-    await expect(page.getByText('SPEECK.AI')).toBeVisible();
+    // Verify branding (appears in nav, hero and footer)
+    await expect(page.getByText('SPEECK.AI').first()).toBeVisible();
   });
 
   test('landing page features section is visible', async ({ page }) => {
@@ -33,10 +33,12 @@ test.describe('SPEECK.AI Landing Page', () => {
   test('navigation to demo page works', async ({ page }) => {
     await page.goto('/');
 
-    await page.getByText('demo.run()').click();
+    await page.getByText('demo.run()').first().click();
 
-    await expect(page).toHaveURL(/.*demo/);
-    await expect(page.getByText('Start Scenario')).toBeVisible();
+    // Use waitForURL with a navigation-length timeout so a cold /demo compile
+    // (which can be slow when routes compile in parallel) doesn't flake.
+    await page.waitForURL(/.*demo/, { timeout: 60_000 });
+    await expect(page.getByRole('button', { name: /scenario.start/i })).toBeVisible({ timeout: 30_000 });
   });
 });
 
@@ -44,23 +46,25 @@ test.describe('SPEECK.AI Demo Page', () => {
   test('demo page loads with start button', async ({ page }) => {
     await page.goto('/demo');
 
-    await expect(page.getByRole('button', { name: /start scenario/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /scenario.start/i })).toBeVisible();
   });
 
-  test('starting scenario shows AI message', async ({ page }) => {
+  test('starting scenario shows conversation UI', async ({ page }) => {
     await page.goto('/demo');
 
-    await page.getByRole('button', { name: /start scenario/i }).click();
+    await page.getByRole('button', { name: /scenario.start/i }).click();
 
-    // Wait for AI message to appear
-    await expect(page.getByText(/database|replication|dashboard/i)).toBeVisible({ timeout: 10000 });
+    // The scenario is now generated dynamically (from the job description +
+    // language), so assert the conversation UI appears rather than any
+    // specific hardcoded text.
+    await expect(page.getByPlaceholder(/type your response/i)).toBeVisible({ timeout: 15000 });
   });
 
   test('user can send a text message', async ({ page }) => {
     await page.goto('/demo');
 
-    await page.getByRole('button', { name: /start scenario/i }).click();
-    await expect(page.getByText(/database|replication/i)).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: /scenario.start/i }).click();
+    await expect(page.getByPlaceholder(/type your response/i)).toBeVisible({ timeout: 15000 });
 
     // Type and send a message
     const input = page.getByPlaceholder(/type your response/i);
@@ -74,8 +78,8 @@ test.describe('SPEECK.AI Demo Page', () => {
   test('CEFR assessment modal appears on completion', async ({ page }) => {
     await page.goto('/demo');
 
-    await page.getByRole('button', { name: /start scenario/i }).click();
-    await expect(page.getByText(/database|replication/i)).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: /scenario.start/i }).click();
+    await expect(page.getByPlaceholder(/type your response/i)).toBeVisible({ timeout: 15000 });
 
     // Send several messages to progress the conversation
     const responses = [
@@ -113,7 +117,7 @@ test.describe('SPEECK.AI Auth Pages', () => {
   test('signup page loads', async ({ page }) => {
     await page.goto('/auth/signup');
 
-    await expect(page.getByText('sign up')).toBeVisible();
+    await expect(page.getByText(/signup/i).first()).toBeVisible();
   });
 });
 

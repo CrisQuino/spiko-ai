@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import {
   getKPIMetrics,
@@ -332,6 +333,7 @@ export default function AdminDashboard() {
             <thead>
               <tr className="border-b border-gray-300">
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Date</th>
+                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">User</th>
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Scenario</th>
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Duration</th>
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">CEFR</th>
@@ -345,18 +347,50 @@ export default function AdminDashboard() {
                   <td className="py-3 px-4 font-mono text-sm">
                     {new Date(lesson.completed_at).toLocaleDateString()}
                   </td>
+                  <td className="py-3 px-4 font-mono text-sm text-gray-700">
+                    {lesson.email || lesson.full_name || (lesson.user_id ? `${lesson.user_id.slice(0, 8)}…` : '—')}
+                  </td>
                   <td className="py-3 px-4">
-                    <span className="tech-badge-emerald text-xs">
-                      {lesson.scenario_type}
-                    </span>
+                    <Link
+                      href={`/dashboard/session/${lesson.lesson_id}`}
+                      className="tech-badge-emerald text-xs hover:underline"
+                      title="Review this session"
+                    >
+                      {lesson.scenario_title || lesson.scenario_type} →
+                    </Link>
                   </td>
                   <td className="py-3 px-4 font-mono text-sm text-gray-600">
                     {Math.floor((lesson.duration_seconds || 0) / 60)}:{String((lesson.duration_seconds || 0) % 60).padStart(2, '0')}
                   </td>
                   <td className="py-3 px-4">
                     {lesson.cefr_overall && (
-                      <span className="tech-badge-cyan text-xs">
-                        {lesson.cefr_overall}
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="tech-badge-cyan text-xs">
+                          {lesson.cefr_overall}
+                        </span>
+                        {(() => {
+                          const order = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+                          const t = order.indexOf(lesson.target_level);
+                          const o = order.indexOf(lesson.cefr_overall);
+                          if (t < 0 || o < 0) return null;
+                          if (o === t)
+                            return (
+                              <span className="text-blue-500" title={`Target ${lesson.target_level} — met`} aria-label="meets target">
+                                ●
+                              </span>
+                            );
+                          if (o > t)
+                            return (
+                              <span className="text-green-600" title={`Target ${lesson.target_level} — above target`} aria-label="above target">
+                                ▲
+                              </span>
+                            );
+                          return (
+                            <span className="text-red-600" title={`Target ${lesson.target_level} — below target`} aria-label="below target">
+                              ▼
+                            </span>
+                          );
+                        })()}
                       </span>
                     )}
                   </td>
@@ -371,7 +405,7 @@ export default function AdminDashboard() {
               
               {recentLessons.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-gray-500 font-mono text-sm">
+                  <td colSpan={7} className="py-8 text-center text-gray-500 font-mono text-sm">
                     // no_lessons_yet
                   </td>
                 </tr>

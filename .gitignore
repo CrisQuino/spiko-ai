@@ -36,5 +36,9 @@ next-env.d.ts
 # Audio cache directory (filesystem strategy)
 .cache/
 
+# Playwright E2E artifacts
+/playwright-report/
+/test-results/
+
 # GitHub auto-deploy token (sensitive)
 .github-token

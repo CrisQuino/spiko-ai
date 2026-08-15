@@ -4,7 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { generateQuickFeedback, evaluateCEFR, type CEFRAssessment } from '@/lib/cefr-evaluator';
-import { supabase } from '@/lib/supabase';
+import { supabase, getJobDescription } from '@/lib/supabase';
+import { getLanguage, type LanguageConfig } from '@/lib/languages';
+import { makeT } from '@/lib/i18n';
 
 type Message = {
   role: 'ai' | 'user';
@@ -30,9 +32,21 @@ export default function DemoPage() {
   
   const [lessonId, setLessonId] = useState<string | null>(null);
   const [startTime, setStartTime] = useState<number | null>(null);
+
+  // Practice configuration (language + job description) read from the URL.
+  const [language, setLanguage] = useState<LanguageConfig>(() => getLanguage(null));
+  const [jdTitle, setJdTitle] = useState<string | null>(null);
+  // Refs mirror the config so async callbacks never read a stale value.
+  const languageRef = useRef<LanguageConfig>(getLanguage(null));
+  const jdRef = useRef<{ content: string | null; title: string | null }>({ content: null, title: null });
+  const levelRef = useRef<string | null>(null); // selected CEFR level ('' = auto)
   const [totalTokens, setTotalTokens] = useState({ input: 0, output: 0 });
+  const totalTokensRef = useRef({ input: 0, output: 0 }); // mirror to avoid stale closures at completion
+  const [scenarioTitle, setScenarioTitle] = useState<string | null>(null);
+  const scenarioTitleRef = useRef<string | null>(null);
   const [quickFeedback, setQuickFeedback] = useState<string[]>([]);
   const [cefrAssessment, setCefrAssessment] = useState<CEFRAssessment | null>(null);
+  const [evaluating, setEvaluating] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [pendingAudioQueue, setPendingAudioQueue] = useState(0);
   const [clarificationCount, setClarificationCount] = useState(0);
@@ -106,6 +120,24 @@ export default function DemoPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Stop all audio / recognition when leaving the page (navigation or unmount),
+  // so nothing keeps talking in the background after closing the session.
+  useEffect(() => {
+    return () => {
+      try {
+        audioElementRef.current?.pause();
+        audioRef.current?.pause();
+        recognitionRef.current?.stop();
+      } catch {
+        // ignore
+      }
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      voiceModeRef.current = false;
+    };
+  }, []);
   
   // Timer for elapsed time
   useEffect(() => {
@@ -124,6 +156,30 @@ export default function DemoPage() {
   const [demoTimeLimit] = useState(2 * 60 * 1000); // 2 minutes for demo
   const [isCheckingAuth, setIsCheckingAuth] = useState(true); // Loading state for auth check
   
+  // Read practice config (language + job description) from the URL on mount.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    const lang = getLanguage(params.get('lang'));
+    setLanguage(lang);
+    languageRef.current = lang;
+
+    levelRef.current = params.get('level');
+
+    const jdId = params.get('jd');
+    if (jdId) {
+      getJobDescription(jdId).then((jd) => {
+        if (jd) {
+          setJdTitle(jd.title);
+          jdRef.current = { content: jd.content, title: jd.title };
+          console.log('📋 Loaded job description:', jd.title);
+        } else {
+          console.warn('⚠️ Job description not found or not accessible:', jdId);
+        }
+      });
+    }
+  }, []);
+
   // Check authentication status on mount
   useEffect(() => {
     const checkAuth = async () => {
@@ -251,30 +307,36 @@ export default function DemoPage() {
       console.log('  Total tokens:', totalTokens);
       console.log('  Clarifications needed:', clarificationCount);
       
-      // ✅ CLIENT-SIDE EVALUATION (Instantaneous!)
-      console.log('🧮 Starting CEFR evaluation...');
-      const evalStart = Date.now();
-      
-      const assessment = evaluateCEFR(
-        userMessages,
-        durationSeconds,
-        'production_incident',
-        clarificationCount
-      );
-      
-      const evalTime = Date.now() - evalStart;
-      
-      console.log(`✅ Assessment calculated in ${evalTime}ms`);
-      console.log('📊 Results:', {
-        level: assessment.overall.level,
-        score: assessment.overall.score,
-        fluency: assessment.fluency.score,
-        vocabulary: assessment.vocabulary.score,
-        technicalJargon: assessment.technicalJargon.level
-      });
-      console.log('🎯 Full assessment object:', assessment);
-      
-      // Show assessment IMMEDIATELY
+      // Stop any audio/conversation still playing before showing the result.
+      stopAllAudio();
+      setEvaluating(true);
+
+      // Rigorous, language-aware CEFR evaluation via the LLM, with the heuristic
+      // evaluator as a safety fallback if the call fails.
+      console.log('🧮 Requesting LLM CEFR evaluation...');
+      let assessment: CEFRAssessment;
+      try {
+        const evalRes = await fetch('/api/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: currentMessages,
+            language: languageRef.current.code,
+            level: levelRef.current,
+          }),
+        });
+        if (!evalRes.ok) throw new Error(`evaluate ${evalRes.status}`);
+        const evalData = await evalRes.json();
+        assessment = evalData.assessment;
+        console.log('✅ Assessment source:', evalData.source, '→', assessment.overall.level, assessment.overall.score);
+      } catch (e) {
+        console.warn('⚠️ LLM evaluation failed, using heuristic fallback:', e);
+        assessment = evaluateCEFR(userMessages, durationSeconds, 'production_incident', clarificationCount);
+      }
+
+      setEvaluating(false);
+
+      // Show assessment
       console.log('💾 Setting CEFR assessment state...');
       setCefrAssessment(assessment);
       console.log('✅ CEFR assessment state set!');
@@ -298,9 +360,11 @@ export default function DemoPage() {
               lessonId: currentLessonId,
               messages: currentMessages, // Send full messages array, not just user content
               durationSeconds,
-              tokenUsage: totalTokens,
+              tokenUsage: totalTokensRef.current,
               clarificationCount,
-              assessment // Include the client assessment
+              assessment, // Include the client assessment
+              scenarioTitle: scenarioTitleRef.current,
+              targetLevel: levelRef.current // selected CEFR target ('' = auto)
             })
           })
             .then(response => {
@@ -514,15 +578,84 @@ export default function DemoPage() {
     }
     
     setTimeout(() => {
-      addAIMessage(
-        "Hey! Sorry to bother you, but we have a problem with the database. " +
-        "Our reporting dashboard is showing data from like 2 hours ago, and customers " +
-        "are starting to complain they can't see their recent orders. Can you take a look?"
-      );
+      generateOpeningMessage();
     }, 1000);
   };
 
+  // Fallback opening line per language, used only if the API call fails.
+  const FALLBACK_OPENER: Record<string, string> = {
+    en: "Hey, sorry to bother you — we've got an urgent issue and I could really use your help. Can you take a look?",
+    fr: "Salut, désolé de te déranger — on a un problème urgent et j'aurais vraiment besoin de ton aide. Tu peux jeter un œil ?",
+    pt: "Oi, desculpa incomodar — temos um problema urgente e eu precisaria muito da sua ajuda. Você pode dar uma olhada?",
+  };
+
+  // Ask the model to open the scenario (derived from the job description + language).
+  const generateOpeningMessage = async () => {
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [],
+          language: languageRef.current.code,
+          jobDescription: jdRef.current.content,
+          jobTitle: jdRef.current.title,
+          level: levelRef.current,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.title) {
+          setScenarioTitle(data.title);
+          scenarioTitleRef.current = data.title;
+        }
+        if (data.tokenUsage) {
+          const next = {
+            input: totalTokensRef.current.input + (data.tokenUsage.input || 0),
+            output: totalTokensRef.current.output + (data.tokenUsage.output || 0),
+          };
+          totalTokensRef.current = next;
+          setTotalTokens(next);
+        }
+        if (data.message) {
+          addAIMessage(data.message);
+          return;
+        }
+      }
+      throw new Error('No opening message returned');
+    } catch (error) {
+      console.error('⚠️ Opening message failed, using fallback:', error);
+      addAIMessage(FALLBACK_OPENER[languageRef.current.code] || FALLBACK_OPENER.en);
+    }
+  };
+
+  // Hard-stop any audio playback (audio element + Web Speech) and clear the queue.
+  const stopAllAudio = () => {
+    // Disable the continuous voice loop so it doesn't auto-restart recording.
+    voiceModeRef.current = false;
+    setVoiceModeActive(false);
+    try {
+      audioElementRef.current?.pause();
+      audioRef.current?.pause();
+      recognitionRef.current?.stop();
+    } catch {
+      // ignore — element/recognition may not be initialized yet
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsPlayingAudio(false);
+    setIsRecording(false);
+    setPendingAudioQueue(0);
+  };
+
   const addAIMessage = (content: string) => {
+    // Once the scenario is complete, don't add or speak any more AI lines.
+    if (scenarioCompletedRef.current) {
+      console.log('⏹️ Scenario completed — suppressing new AI message');
+      return;
+    }
     console.log('💬 ADDING AI MESSAGE to queue');
     setPendingAudioQueue(prev => prev + 1);
     
@@ -541,7 +674,7 @@ export default function DemoPage() {
   };
   
   // Browser TTS fallback function (for mobile/iOS compatibility)
-  const useBrowserTTS = (text: string) => {
+  const playBrowserTTS = (text: string) => {
     console.log('🔊 Using Browser TTS fallback');
     
     if ('speechSynthesis' in window) {
@@ -549,12 +682,17 @@ export default function DemoPage() {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
+      utterance.lang = languageRef.current.bcp47;
       
       // Try to use a female voice for consistency
       const voices = window.speechSynthesis.getVoices();
-      const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Victoria'));
-      if (femaleVoice) {
-        utterance.voice = femaleVoice;
+      const langPrefix = languageRef.current.bcp47.split('-')[0];
+      const langVoice = voices.find(v => (v.lang || '').toLowerCase().startsWith(langPrefix));
+      if (langVoice) {
+        utterance.voice = langVoice;
+      } else if (langPrefix === 'en') {
+        const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Victoria'));
+        if (femaleVoice) utterance.voice = femaleVoice;
       }
       
       utterance.onend = () => {
@@ -618,9 +756,10 @@ export default function DemoPage() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             text,
-            isFreeUser: isDemoMode  // Use free TTS in demo mode
+            isFreeUser: isDemoMode,  // Use free TTS in demo mode
+            language: languageRef.current.code,
           }),
         });
         
@@ -688,7 +827,7 @@ export default function DemoPage() {
             setPendingAudioQueue(prev => Math.max(0, prev - 1));
             URL.revokeObjectURL(audioUrl);
             // Try browser TTS as fallback
-            useBrowserTTS(text);
+            playBrowserTTS(text);
             return;
           }
           return; // Success! Exit function
@@ -725,12 +864,17 @@ export default function DemoPage() {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
+      utterance.lang = languageRef.current.bcp47;
       
       // Try to use a female voice for consistency
       const voices = window.speechSynthesis.getVoices();
-      const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Victoria'));
-      if (femaleVoice) {
-        utterance.voice = femaleVoice;
+      const langPrefix = languageRef.current.bcp47.split('-')[0];
+      const langVoice = voices.find(v => (v.lang || '').toLowerCase().startsWith(langPrefix));
+      if (langVoice) {
+        utterance.voice = langVoice;
+      } else if (langPrefix === 'en') {
+        const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Victoria'));
+        if (femaleVoice) utterance.voice = femaleVoice;
       }
       
       utterance.onend = () => {
@@ -790,7 +934,7 @@ export default function DemoPage() {
     }
     
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
+    recognition.lang = languageRef.current.bcp47;
     recognition.interimResults = true; // Show interim results while speaking
     recognition.maxAlternatives = 1;
     recognition.continuous = true; // Keep listening even during pauses
@@ -952,6 +1096,11 @@ export default function DemoPage() {
   };
 
   const respondToUser = async (userMessage: string, conversationHistory: Message[]) => {
+    // Don't process a reply if the scenario already ended.
+    if (scenarioCompletedRef.current) {
+      console.log('⏹️ Scenario completed — ignoring pending user message');
+      return;
+    }
     try {
       console.log('📤 Sending to Claude with', conversationHistory.length, 'messages');
       
@@ -962,7 +1111,10 @@ export default function DemoPage() {
         },
         body: JSON.stringify({
           messages: conversationHistory,
-          scenario: 'db-replication-crisis',
+          language: languageRef.current.code,
+          jobDescription: jdRef.current.content,
+          jobTitle: jdRef.current.title,
+          level: levelRef.current,
         }),
       });
 
@@ -973,12 +1125,14 @@ export default function DemoPage() {
       const data = await response.json();
       
       if (data.tokenUsage) {
-        setTotalTokens(prev => ({
-          input: prev.input + (data.tokenUsage.input || 0),
-          output: prev.output + (data.tokenUsage.output || 0)
-        }));
+        const next = {
+          input: totalTokensRef.current.input + (data.tokenUsage.input || 0),
+          output: totalTokensRef.current.output + (data.tokenUsage.output || 0),
+        };
+        totalTokensRef.current = next;
+        setTotalTokens(next);
       }
-      
+
       const messageCount = messages.filter(m => m.role === 'user').length + 1;
       const feedback = generateQuickFeedback(userMessage, messageCount, 'database');
       if (feedback) {
@@ -1049,6 +1203,9 @@ export default function DemoPage() {
     }
   };
 
+  // Translator for the fixed UI chrome, in the selected practice language.
+  const t = makeT(language.code);
+
   if (!started) {
     return (
       <div className="min-h-screen flex items-center justify-center px-6 relative overflow-hidden">
@@ -1080,18 +1237,18 @@ export default function DemoPage() {
               <div className="font-mono text-sm text-gray-500 mb-2">// scenario.demo()</div>
               <h1 className="text-3xl md:text-4xl font-bold mb-2">
                 <span className="bg-gradient-to-r from-emerald-600 via-cyan-600 to-blue-600 bg-clip-text text-transparent font-mono">
-                  Database Replication Crisis
+                  {jdTitle || t('title_fallback')}
                 </span>
               </h1>
               <p className="text-gray-600 font-mono text-sm">
-                production.incident = <span className="text-red-600">CRITICAL</span>
+                language = <span className="text-emerald-600">{language.flag} {language.label}</span>
               </p>
             </div>
-            
+
             <p className="text-lg text-gray-700 mb-8 text-center">
-              You are the on-call DBA. Sarah (Product Manager) just called about an urgent issue.
+              {jdTitle ? t('desc_from_jd') : t('desc_generic')}
               <br className="hidden md:block" />
-              Practice handling this production incident in English.
+              {t('practice_out_loud', { lang: language.label })}
             </p>
 
             <div className="bg-gray-900 rounded-xl p-6 mb-8 text-left shadow-xl border border-gray-800">
@@ -1108,8 +1265,8 @@ export default function DemoPage() {
                   <span className="text-cyan-400">const</span> <span className="text-white">scenario</span> <span className="text-gray-500">=</span> <span className="text-yellow-300">{'{'}</span>{'\n'}
                   {'  '}<span className="text-emerald-400">duration</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'{isDemoMode ? '2 minutes (demo)' : '5-7 minutes'}'</span><span className="text-gray-500">,</span>{'\n'}
                   {'  '}<span className="text-emerald-400">difficulty</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'MEDIUM'</span><span className="text-gray-500">,</span>{'\n'}
-                  {'  '}<span className="text-emerald-400">role</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'Database Administrator'</span><span className="text-gray-500">,</span>{'\n'}
-                  {'  '}<span className="text-emerald-400">character</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'Sarah Chen (PM)'</span><span className="text-gray-500">,</span>{'\n'}
+                  {'  '}<span className="text-emerald-400">role</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'{jdTitle || 'Custom scenario'}'</span><span className="text-gray-500">,</span>{'\n'}
+                  {'  '}<span className="text-emerald-400">language</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'{language.label}'</span><span className="text-gray-500">,</span>{'\n'}
                   {'  '}<span className="text-emerald-400">audio</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'{isDemoMode ? 'browser TTS' : 'premium AI'}'</span><span className="text-gray-500">,</span>{'\n'}
                   {'  '}<span className="text-emerald-400">cefr_evaluation</span><span className="text-gray-500">:</span> <span className="text-purple-400">true</span><span className="text-gray-500">,</span>{'\n'}
                   {'  '}<span className="text-emerald-400">feedback</span><span className="text-gray-500">:</span> <span className="text-yellow-300">'real-time'</span>{'\n'}
@@ -1123,7 +1280,7 @@ export default function DemoPage() {
               <div className="bg-gray-50 border-2 border-gray-300 rounded-xl p-4 mb-6">
                 <div className="flex items-center space-x-3">
                   <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-sm font-mono text-gray-600">Checking authentication...</p>
+                  <p className="text-sm font-mono text-gray-600">{t('checking_auth')}</p>
                 </div>
               </div>
             ) : isDemoMode ? (
@@ -1131,14 +1288,14 @@ export default function DemoPage() {
                 <div className="flex items-start space-x-3">
                   <span className="text-2xl">🎮</span>
                   <div className="flex-1">
-                    <h3 className="font-mono font-bold text-amber-900 mb-1">Demo Mode Active</h3>
+                    <h3 className="font-mono font-bold text-amber-900 mb-1">{t('demo_mode_active')}</h3>
                     <ul className="text-sm text-amber-800 space-y-1 font-mono">
-                      <li>⏱️ Limited to 2 minutes of conversation</li>
-                      <li>🔊 Basic audio quality (browser text-to-speech)</li>
-                      <li>✨ Full CEFR assessment included</li>
+                      <li>⏱️ {t('demo_bullet_time')}</li>
+                      <li>🔊 {t('demo_bullet_audio')}</li>
+                      <li>✨ {t('cefr_included')}</li>
                     </ul>
                     <p className="text-xs text-amber-700 mt-2 font-mono">
-                      <a href="/signup" className="underline font-bold hover:text-amber-900">Sign up</a> for unlimited time + premium AI voices!
+                      <a href="/signup" className="underline font-bold hover:text-amber-900">{t('signup')}</a> {t('signup_tail')}
                     </p>
                   </div>
                 </div>
@@ -1148,12 +1305,12 @@ export default function DemoPage() {
                 <div className="flex items-start space-x-3">
                   <span className="text-2xl">✨</span>
                   <div className="flex-1">
-                    <h3 className="font-mono font-bold text-emerald-900 mb-1">Full Access Mode</h3>
+                    <h3 className="font-mono font-bold text-emerald-900 mb-1">{t('full_access')}</h3>
                     <ul className="text-sm text-emerald-800 space-y-1 font-mono">
-                      <li>⏱️ Extended practice time (5+ minutes)</li>
-                      <li>🔊 Premium AI voice quality</li>
-                      <li>💾 Progress tracking & history</li>
-                      <li>✨ Full CEFR assessment included</li>
+                      <li>⏱️ {t('full_bullet_time')}</li>
+                      <li>🔊 {t('full_bullet_audio')}</li>
+                      <li>💾 {t('full_bullet_history')}</li>
+                      <li>✨ {t('cefr_included')}</li>
                     </ul>
                   </div>
                 </div>
@@ -1209,7 +1366,7 @@ export default function DemoPage() {
             <div>
               <div className="flex items-center space-x-2 mb-1">
                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                <h1 className="font-mono font-bold text-lg gradient-text">Database Replication Crisis</h1>
+                <h1 className="font-mono font-bold text-lg gradient-text">{scenarioTitle || jdTitle || 'Practice Session'}</h1>
                 {isDemoMode && (
                   <span className="text-xs font-mono bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
                     DEMO
@@ -1232,21 +1389,21 @@ export default function DemoPage() {
               {isRecording && (
                 <div className="flex items-center space-x-2 bg-red-500 text-white px-4 py-2 rounded-full animate-pulse">
                   <div className="w-3 h-3 bg-white rounded-full animate-ping"></div>
-                  <span className="font-mono text-sm font-bold">🎙 RECORDING</span>
+                  <span className="font-mono text-sm font-bold">🎙 {t('recording')}</span>
                 </div>
               )}
               
               {isPlayingAudio && (
                 <div className="flex items-center space-x-2 bg-purple-500 text-white px-4 py-2 rounded-full animate-pulse">
                   <div className="w-3 h-3 bg-white rounded-full animate-ping"></div>
-                  <span className="font-mono text-sm font-bold">🔊 PLAYING</span>
+                  <span className="font-mono text-sm font-bold">🔊 {t('playing')}</span>
                 </div>
               )}
               
               {!isRecording && !isPlayingAudio && (
                 <div className="flex items-center space-x-2 text-gray-500">
                   <div className="w-3 h-3 bg-gray-300 rounded-full"></div>
-                  <span className="font-mono text-sm">Ready</span>
+                  <span className="font-mono text-sm">{t('ready')}</span>
                 </div>
               )}
             </div>
@@ -1278,7 +1435,7 @@ export default function DemoPage() {
               <div className="bg-red-500 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center space-x-4 animate-pulse">
                 <div className="w-4 h-4 bg-white rounded-full animate-ping"></div>
                 <div className="flex flex-col">
-                  <span className="font-mono font-bold text-lg">🎙 RECORDING</span>
+                  <span className="font-mono font-bold text-lg">🎙 {t('recording')}</span>
                   <span className="font-mono text-xs opacity-90">Listening to your voice...</span>
                 </div>
               </div>
@@ -1368,7 +1525,7 @@ export default function DemoPage() {
                   value={userInput}
                   onChange={(e) => setUserInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleUserMessage()}
-                  placeholder={isRecording ? "listening... speak now" : "type your response..."}
+                  placeholder={isRecording ? t('listening') : t('your_response')}
                   className={`w-full pl-10 pr-6 py-4 glass rounded-xl font-mono text-sm focus:outline-none focus:ring-2 ${
                     isRecording 
                       ? 'ring-2 ring-red-400 border-red-300 bg-red-50/50' 
@@ -1504,8 +1661,18 @@ export default function DemoPage() {
                     <div className="grid md:grid-cols-2 gap-4 mb-8 text-left">
                       <div className="glass rounded-xl p-4 border border-gray-200/50">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-mono text-gray-600">CEFR Level</span>
-                          <span className="text-2xl font-mono font-bold gradient-text">{cefrAssessment.overall.level}</span>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-mono text-gray-600">Your level</span>
+                            {levelRef.current && (
+                              <span className="text-[11px] font-mono text-gray-400">target: {levelRef.current}</span>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <span className="text-2xl font-mono font-bold gradient-text">{cefrAssessment.overall.level}</span>
+                            {levelRef.current && levelRef.current !== cefrAssessment.overall.level && (
+                              <span className="block text-[11px] font-mono text-gray-400">was aiming for {levelRef.current}</span>
+                            )}
+                          </div>
                         </div>
                         <p className="text-xs text-gray-500">{cefrAssessment.overall.description}</p>
                       </div>
@@ -1547,7 +1714,7 @@ export default function DemoPage() {
                     <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     <p className="text-gray-500 font-mono text-sm mb-4">// calculating_assessment()</p>
                     <p className="text-xs text-gray-400 mb-4 font-mono">
-                      ⏳ Evaluating your performance...
+                      {evaluating ? '⏳ Grading your language against CEFR…' : '⏳ Evaluating your performance...'}
                     </p>
                   </div>
                 )}
