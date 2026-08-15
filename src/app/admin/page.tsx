@@ -126,24 +126,28 @@ export default function AdminDashboard() {
     return Object.values(m).sort((a, b) => b.cost - a.cost);
   }, [langLessons]);
 
-  // CEFR distribution.
+  // Selecting a user scopes CEFR distribution + recent lessons to that user
+  // (KPIs, costs, activity and top_users stay on the full set).
+  const scoped = useMemo(
+    () => (selectedUser ? langLessons.filter((l) => l.user_id === selectedUser.id) : langLessons),
+    [langLessons, selectedUser]
+  );
+
+  // CEFR distribution (scoped to the selected user when one is picked).
   const cefr = useMemo(() => {
     const counts: Record<string, number> = {};
     let total = 0;
-    langLessons.forEach((l) => {
+    scoped.forEach((l) => {
       if (l.cefr_overall) {
         counts[l.cefr_overall] = (counts[l.cefr_overall] || 0) + 1;
         total += 1;
       }
     });
     return { counts, total };
-  }, [langLessons]);
+  }, [scoped]);
 
   // Recent lessons: all of a selected user's lessons, else the latest 20.
-  const recent = useMemo(() => {
-    if (selectedUser) return langLessons.filter((l) => l.user_id === selectedUser.id).slice(0, 100);
-    return langLessons.slice(0, 20);
-  }, [langLessons, selectedUser]);
+  const recent = useMemo(() => scoped.slice(0, selectedUser ? 100 : 20), [scoped, selectedUser]);
 
   if (loading) {
     return (
@@ -368,9 +372,19 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Users */}
         <div className="glass rounded-2xl p-6 border border-gray-200/50">
-          <h2 className="text-xl font-bold font-mono mb-4">
-            <span className="text-gray-400">// </span>top_users() <span className="text-gray-400 text-sm">[{users.length}]</span>
-          </h2>
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+            <h2 className="text-xl font-bold font-mono">
+              <span className="text-gray-400">// </span>top_users() <span className="text-gray-400 text-sm">[{users.length}]</span>
+            </h2>
+            {selectedUser && (
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="px-2.5 py-1 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition-all font-mono text-xs"
+              >
+                ✕ show all
+              </button>
+            )}
+          </div>
 
           <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
             {users.map((u, i) => (
@@ -406,9 +420,16 @@ export default function AdminDashboard() {
 
         {/* CEFR Distribution */}
         <div className="glass rounded-2xl p-6 border border-gray-200/50">
-          <h2 className="text-xl font-bold font-mono mb-4">
-            <span className="text-gray-400">// </span>cefr_distribution()
-          </h2>
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+            <h2 className="text-xl font-bold font-mono">
+              <span className="text-gray-400">// </span>cefr_distribution()
+            </h2>
+            {selectedUser && (
+              <span className="font-mono text-xs px-2 py-1 rounded-md bg-emerald-100 text-emerald-700">
+                filtered: {selectedUser.email || `${selectedUser.id.slice(0, 8)}…`}
+              </span>
+            )}
+          </div>
           <div className="space-y-3">
             {['C2', 'C1', 'B2', 'B1', 'A2', 'A1'].map((level) => {
               const count = cefr.counts[level] || 0;
@@ -441,16 +462,9 @@ export default function AdminDashboard() {
             <span className="text-gray-400">// </span>recent_lessons()
           </h2>
           {selectedUser && (
-            <div className="flex items-center gap-2 font-mono text-xs">
-              <span className="text-gray-500">filtered by</span>
-              <span className="px-2 py-1 rounded-md bg-emerald-100 text-emerald-700">{selectedUser.email || `${selectedUser.id.slice(0, 8)}…`}</span>
-              <button
-                onClick={() => setSelectedUser(null)}
-                className="px-2.5 py-1 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition-all"
-              >
-                ✕ show all
-              </button>
-            </div>
+            <span className="font-mono text-xs px-2 py-1 rounded-md bg-emerald-100 text-emerald-700">
+              filtered: {selectedUser.email || `${selectedUser.id.slice(0, 8)}…`}
+            </span>
           )}
         </div>
         <div className="overflow-x-auto">
