@@ -104,7 +104,10 @@ export default function AdminDashboard() {
 
   const maxCost = useMemo(() => Math.max(0, ...series.map((s) => s.cost)), [series]);
   const rangeTotal = useMemo(() => series.reduce((s, b) => s + b.cost, 0), [series]);
-  const maxCount = useMemo(() => Math.max(1, ...series.map((s) => Math.max(s.lessons, s.users))), [series]);
+  // Axis maxima with ~18% headroom so on-bar/point value labels never clip.
+  const costAxis = useMemo(() => (maxCost > 0 ? maxCost * 1.18 : 1), [maxCost]);
+  const lessonsAxis = useMemo(() => Math.max(1, Math.ceil(Math.max(1, ...series.map((s) => s.lessons)) * 1.18)), [series]);
+  const usersAxis = useMemo(() => Math.max(1, Math.ceil(Math.max(1, ...series.map((s) => s.users)) * 1.18)), [series]);
 
   // Per-user aggregate.
   const users = useMemo(() => {
@@ -234,8 +237,8 @@ export default function AdminDashboard() {
         <div className="flex gap-3">
           {/* Y axis */}
           <div className="flex flex-col justify-between h-64 text-right text-xs font-mono text-gray-400 py-1 shrink-0 w-16">
-            <span>${maxCost.toFixed(2)}</span>
-            <span>${(maxCost / 2).toFixed(2)}</span>
+            <span>${costAxis.toFixed(2)}</span>
+            <span>${(costAxis / 2).toFixed(2)}</span>
             <span>$0.00</span>
           </div>
           {/* Bars */}
@@ -245,21 +248,18 @@ export default function AdminDashboard() {
               <div className="absolute left-0 right-0 top-0 border-t border-dashed border-gray-100"></div>
               <div className="absolute left-0 right-0 top-1/2 border-t border-dashed border-gray-100"></div>
               {series.map((b) => {
-                const h = maxCost > 0 ? (b.cost / maxCost) * 100 : 0;
+                const h = costAxis > 0 ? (b.cost / costAxis) * 100 : 0;
                 return (
                   <div key={b.key} className="flex-1 flex flex-col justify-end items-center h-full group relative">
                     <div
                       className="w-full bg-gradient-to-t from-emerald-500 to-cyan-500 rounded-t hover:from-emerald-600 hover:to-cyan-600 transition-all cursor-pointer min-h-[2px] relative"
                       style={{ height: `${h}%` }}
                     >
-                      {/* value on top of each bar */}
-                      <span
-                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 text-[9px] font-mono text-gray-600 whitespace-nowrap"
-                        style={{ writingMode: 'vertical-rl' }}
-                      >
+                      {/* value on top of each bar (horizontal, always visible thanks to axis headroom) */}
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 text-[10px] font-mono text-gray-600 whitespace-nowrap font-semibold">
                         ${b.cost.toFixed(3)}
                       </span>
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap font-mono z-10">
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-5 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap font-mono z-10">
                         ${b.cost.toFixed(4)}<br />
                         {b.lessons} lessons · {b.users} users · {b.tokens.toLocaleString()} tok<br />
                         {b.key}
@@ -281,65 +281,78 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Activity: lessons + active users (lines, same buckets/range) */}
+      {/* Activity: lessons + active users, dual Y axis, dots + per-point values */}
       <div className="glass rounded-2xl p-6 border border-gray-200/50">
         <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
           <h2 className="text-xl font-bold font-mono">
             <span className="text-gray-400">// </span>activity()
           </h2>
           <div className="flex items-center gap-4 font-mono text-xs">
-            <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-emerald-500"></span>lessons</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-cyan-500"></span>active users</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>lessons (left)</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-500"></span>active users (right)</span>
             <span className="text-gray-400">({granularity === 'day' ? 'per day' : 'per month'})</span>
           </div>
         </div>
 
-        <div className="flex gap-3">
-          {/* Y axis (integers) */}
-          <div className="flex flex-col justify-between h-56 text-right text-xs font-mono text-gray-400 py-1 shrink-0 w-10">
-            <span>{maxCount}</span>
-            <span>{Math.round(maxCount / 2)}</span>
+        <div className="flex gap-2">
+          {/* left Y axis — lessons */}
+          <div className="flex flex-col justify-between h-56 text-right text-xs font-mono text-emerald-600 py-1 shrink-0 w-8">
+            <span>{lessonsAxis}</span>
+            <span>{Math.round(lessonsAxis / 2)}</span>
             <span>0</span>
           </div>
+
           <div className="flex-1 overflow-x-auto">
             <div className="min-w-[500px]">
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-56 border-l border-b border-gray-200">
-                <line x1="0" y1="50" x2="100" y2="50" stroke="#f3f4f6" strokeWidth="0.5" />
-                {series.length > 0 && (
-                  <>
-                    <polyline
-                      fill="none"
-                      stroke="#10b981"
-                      strokeWidth="2"
-                      vectorEffect="non-scaling-stroke"
-                      points={series
-                        .map((s, i) => `${series.length > 1 ? (i / (series.length - 1)) * 100 : 50},${100 - (s.lessons / maxCount) * 100}`)
-                        .join(' ')}
-                    />
-                    <polyline
-                      fill="none"
-                      stroke="#06b6d4"
-                      strokeWidth="2"
-                      vectorEffect="non-scaling-stroke"
-                      points={series
-                        .map((s, i) => `${series.length > 1 ? (i / (series.length - 1)) * 100 : 50},${100 - (s.users / maxCount) * 100}`)
-                        .join(' ')}
-                    />
-                  </>
+              <div className="relative h-56 border-l border-r border-b border-gray-200">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+                  <line x1="0" y1="50" x2="100" y2="50" stroke="#f3f4f6" strokeWidth="0.5" />
+                  {series.length > 1 && (
+                    <>
+                      <polyline fill="none" stroke="#10b981" strokeWidth="2" vectorEffect="non-scaling-stroke"
+                        points={series.map((s, i) => `${(i / (series.length - 1)) * 100},${100 - (s.lessons / lessonsAxis) * 100}`).join(' ')} />
+                      <polyline fill="none" stroke="#06b6d4" strokeWidth="2" vectorEffect="non-scaling-stroke"
+                        points={series.map((s, i) => `${(i / (series.length - 1)) * 100},${100 - (s.users / usersAxis) * 100}`).join(' ')} />
+                    </>
+                  )}
+                </svg>
+                {/* dots + values (HTML so circles don't distort) */}
+                {series.map((s, i) => {
+                  const x = series.length > 1 ? (i / (series.length - 1)) * 100 : 50;
+                  const yl = 100 - (s.lessons / lessonsAxis) * 100;
+                  const yu = 100 - (s.users / usersAxis) * 100;
+                  return (
+                    <div key={s.key}>
+                      <div className="absolute w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white shadow" style={{ left: `${x}%`, top: `${yl}%`, transform: 'translate(-50%,-50%)' }} title={`${s.lessons} lessons`} />
+                      <span className="absolute text-[10px] font-mono font-bold text-emerald-700 whitespace-nowrap" style={{ left: `${x}%`, top: `${yl}%`, transform: 'translate(-50%,-170%)' }}>{s.lessons}</span>
+                      <div className="absolute w-2.5 h-2.5 rounded-full bg-cyan-500 border-2 border-white shadow" style={{ left: `${x}%`, top: `${yu}%`, transform: 'translate(-50%,-50%)' }} title={`${s.users} active users`} />
+                      <span className="absolute text-[10px] font-mono font-bold text-cyan-700 whitespace-nowrap" style={{ left: `${x}%`, top: `${yu}%`, transform: 'translate(-50%,70%)' }}>{s.users}</span>
+                    </div>
+                  );
+                })}
+                {series.length === 0 && (
+                  <p className="absolute inset-0 flex items-center justify-center text-gray-400 font-mono text-sm">// no_data_in_range</p>
                 )}
-              </svg>
-              {/* x labels */}
-              <div className="flex justify-between mt-1">
-                {series.map((s) => (
-                  <div key={s.key} className="flex-1 text-center text-[10px] text-gray-400 font-mono truncate">
-                    {granularity === 'day' ? new Date(s.key).getUTCDate() : s.key.slice(2)}
-                  </div>
-                ))}
               </div>
-              {series.length === 0 && (
-                <p className="text-center text-gray-400 font-mono text-sm py-8">// no_data_in_range</p>
-              )}
+              {/* x labels aligned to points */}
+              <div className="relative h-4 mt-1">
+                {series.map((s, i) => {
+                  const x = series.length > 1 ? (i / (series.length - 1)) * 100 : 50;
+                  return (
+                    <span key={s.key} className="absolute text-[10px] text-gray-400 font-mono -translate-x-1/2 whitespace-nowrap" style={{ left: `${x}%` }}>
+                      {granularity === 'day' ? new Date(s.key).getUTCDate() : s.key.slice(2)}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
+          </div>
+
+          {/* right Y axis — active users */}
+          <div className="flex flex-col justify-between h-56 text-left text-xs font-mono text-cyan-600 py-1 shrink-0 w-8">
+            <span>{usersAxis}</span>
+            <span>{Math.round(usersAxis / 2)}</span>
+            <span>0</span>
           </div>
         </div>
       </div>
