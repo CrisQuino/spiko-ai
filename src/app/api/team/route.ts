@@ -110,14 +110,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      case 'revoke_member': {
-        const { user_id, revoked } = body;
-        if (user_id === user.id) return NextResponse.json({ error: 'cannot_revoke_self' }, { status: 400 });
+      case 'remove_member': {
+        // B2B off-boarding: remove a member from the team. They revert to a free
+        // individual (B2C) — company_id cleared, plan free. To re-add, re-invite.
+        const { user_id } = body;
+        if (user_id === user.id) return NextResponse.json({ error: 'cannot_remove_self' }, { status: 400 });
         // Only a member of THIS company, and never another manager.
         const { data: target } = await db.from('profiles').select('id, role, company_id').eq('id', user_id).single();
         if (!target || target.company_id !== companyId) return NextResponse.json({ error: 'not_in_team' }, { status: 404 });
-        if (target.role === 'manager') return NextResponse.json({ error: 'cannot_revoke_manager' }, { status: 403 });
-        await db.from('profiles').update({ status: revoked ? 'revoked' : 'active' }).eq('id', user_id);
+        if (target.role === 'manager') return NextResponse.json({ error: 'cannot_remove_manager' }, { status: 403 });
+        await db.from('profiles').update({ company_id: null, plan: 'free', role: 'employee', status: 'active' }).eq('id', user_id);
         return NextResponse.json({ ok: true });
       }
 

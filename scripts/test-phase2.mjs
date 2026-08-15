@@ -89,43 +89,90 @@ async function main() {
     check('6 list_members shows pending invite', r.status === 200 && (r.body.pending || []).some((p) => p.email === 'mgr@acme.com'));
   }
 
-  // 7) upload company JD (visibility=company)
+  // 7) company JD lifecycle: upload → list → update → delete
   {
-    const r = await api('upload_company_jd', { company_id: companyId, title: 'Company JD', content: 'Shared JD content for the team.' }, adminTok);
-    check('7 upload_company_jd', r.status === 200 && r.body.jd?.visibility === 'company' && r.body.jd?.company_id === companyId);
+    const up = await api('upload_company_jd', { company_id: companyId, title: 'Company JD', content: 'Shared JD content for the team.' }, adminTok);
+    const jdId = up.body.jd?.id;
+    const list = await api('list_company_jds', { company_id: companyId }, adminTok);
+    const upd = await api('update_company_jd', { id: jdId, title: 'Company JD v2', content: 'Updated content.' }, adminTok);
+    const del = await api('delete_company_jd', { id: jdId }, adminTok);
+    const list2 = await api('list_company_jds', { company_id: companyId }, adminTok);
+    check('7 company JD upload/list/update/delete',
+      up.status === 200 && up.body.jd?.visibility === 'company' &&
+      list.status === 200 && (list.body.jds || []).some((j) => j.id === jdId) &&
+      upd.status === 200 && upd.body.jd?.title === 'Company JD v2' &&
+      del.status === 200 && !(list2.body.jds || []).some((j) => j.id === jdId));
   }
 
-  // 8) revoke user
+  // Seat p2-user as a member for the role / ban / removal cases.
+  await setProfile(userId, USER_EMAIL, { company_id: companyId, plan: 'corporate' });
+  const teamStatus = async (tok) => (await fetch(`${BASE}/api/team`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` }, body: JSON.stringify({ action: 'overview' }) })).status;
+
+  // 8) domain_mode='manager' → promoting a member derives the invite domain from their email + grants team access
   {
-    await setProfile(userId, USER_EMAIL, { company_id: companyId, plan: 'corporate' });
-    const r = await api('revoke_user', { user_id: userId, revoked: true }, adminTok);
-    const row = (await dbRow(`/rest/v1/profiles?select=status&id=eq.${userId}`))[0];
-    check('8 revoke_user sets status=revoked', r.status === 200 && row.status === 'revoked');
-    await api('revoke_user', { user_id: userId, revoked: false }, adminTok); // restore
+    await api('update_company', { id: companyId, patch: { domain_mode: 'manager' } }, adminTok);
+    const r = await api('set_member_role', { user_id: userId, role: 'manager' }, adminTok);
+    const comp = (await dbRow(`/rest/v1/companies?select=allowed_email_domain&id=eq.${companyId}`))[0];
+    const ov = await teamStatus(userTok);
+    check('8 manager-mode promote (domain follows + team access)', r.status === 200 && r.body.role === 'manager' && comp.allowed_email_domain === 'spiko-test.example' && ov === 200, `domain=${comp.allowed_email_domain} team=${ov}`);
+    await api('set_member_role', { user_id: userId, role: 'employee' }, adminTok);
+  }
+  // 9) domain_mode='any' → promoting does NOT set a domain; demote removes team access
+  {
+    await api('update_company', { id: companyId, patch: { domain_mode: 'any' } }, adminTok);
+    const r = await api('set_member_role', { user_id: userId, role: 'manager' }, adminTok);
+    const comp = (await dbRow(`/rest/v1/companies?select=allowed_email_domain&id=eq.${companyId}`))[0];
+    const ov = await teamStatus(userTok);
+    await api('set_member_role', { user_id: userId, role: 'employee' }, adminTok);
+    const ov2 = await teamStatus(userTok);
+    check('9 any-mode promote (no domain filter) + demote removes access', r.status === 200 && comp.allowed_email_domain === null && ov === 200 && ov2 === 403, `domain=${comp.allowed_email_domain} team=${ov}->${ov2}`);
+  }
+  // 10) B2C ban blocks login; unban restores; validations (already_banned / not_banned / user_not_found)
+  {
+    const b = await api('ban_user', { email: USER_EMAIL, banned: true }, adminTok);
+    const bannedTok = await token(USER_EMAIL);
+    const again = await api('ban_user', { email: USER_EMAIL, banned: true }, adminTok);
+    const u = await api('ban_user', { email: USER_EMAIL, banned: false }, adminTok);
+    const okTok = await token(USER_EMAIL);
+    const notBanned = await api('ban_user', { email: USER_EMAIL, banned: false }, adminTok);
+    const missing = await api('ban_user', { email: `ghost-${Date.now()}@none.example`, banned: true }, adminTok);
+    check('10 ban/unban + validations',
+      b.status === 200 && !bannedTok && again.status === 409 && again.body.error === 'already_banned' &&
+      u.status === 200 && !!okTok && notBanned.status === 409 && notBanned.body.error === 'not_banned' &&
+      missing.status === 404, `again=${again.status} notBanned=${notBanned.status} missing=${missing.status}`);
+  }
+  // 11) B2B remove_from_company → free individual, then appears in the B2C list
+  {
+    const r = await api('remove_from_company', { user_id: userId }, adminTok);
+    const prof = (await dbRow(`/rest/v1/profiles?select=company_id,plan,role&id=eq.${userId}`))[0];
+    const b2c = await api('list_b2c_users', { search: 'p2-user' }, adminTok);
+    check('11 remove_from_company → free individual + in B2C list',
+      r.status === 200 && prof.company_id === null && prof.plan === 'free' &&
+      (b2c.body.users || []).some((u) => u.id === userId && u.banned === false), JSON.stringify(prof));
   }
 
-  // 9) suspend company
+  // 12) suspend company
   {
     const r = await api('suspend_company', { id: companyId, suspended: true }, adminTok);
     const row = (await dbRow(`/rest/v1/companies?select=status&id=eq.${companyId}`))[0];
-    check('9 suspend_company', r.status === 200 && row.status === 'suspended');
+    check('12 suspend_company', r.status === 200 && row.status === 'suspended');
   }
 
-  // 10) update settings (then restore)
+  // 13) update settings (then restore)
   {
     const before = (await dbRow('/rest/v1/platform_settings?select=free_monthly_sessions&id=eq.1'))[0].free_monthly_sessions;
     const r = await api('update_settings', { patch: { free_monthly_sessions: 7 } }, adminTok);
     const now = (await dbRow('/rest/v1/platform_settings?select=free_monthly_sessions&id=eq.1'))[0].free_monthly_sessions;
-    check('10 update_settings', r.status === 200 && now === 7);
+    check('13 update_settings', r.status === 200 && now === 7);
     await api('update_settings', { patch: { free_monthly_sessions: before } }, adminTok); // restore
   }
 
-  // 11) delete company detaches members
+  // 14) delete company detaches members
   {
     const r = await api('delete_company', { id: companyId }, adminTok);
     const comp = await dbRow(`/rest/v1/companies?select=id&id=eq.${companyId}`);
     const prof = (await dbRow(`/rest/v1/profiles?select=company_id&id=eq.${userId}`))[0];
-    check('11 delete_company (gone + member detached)', r.status === 200 && comp.length === 0 && prof.company_id === null);
+    check('14 delete_company (gone + member detached)', r.status === 200 && comp.length === 0 && prof.company_id === null);
   }
 
   const failed = results.filter((r) => !r.ok);

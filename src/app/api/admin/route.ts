@@ -66,7 +66,16 @@ export async function POST(request: NextRequest) {
       }
       case 'update_company': {
         const { id, patch } = body;
-        const { data, error } = await db.from('companies').update(patch).eq('id', id).select().single();
+        const p = { ...patch };
+        // Domain policy: 'any' clears the filter; 'manager' derives it from the
+        // company's current manager (blank until one is assigned).
+        if (p.domain_mode === 'any') {
+          p.allowed_email_domain = null;
+        } else if (p.domain_mode === 'manager') {
+          const { data: mgr } = await db.from('profiles').select('email').eq('company_id', id).eq('role', 'manager').limit(1).maybeSingle();
+          p.allowed_email_domain = mgr?.email?.includes('@') ? mgr.email.split('@')[1].toLowerCase() : null;
+        }
+        const { data, error } = await db.from('companies').update(p).eq('id', id).select().single();
         if (error) throw error;
         return NextResponse.json({ company: data });
       }
@@ -100,10 +109,96 @@ export async function POST(request: NextRequest) {
         const { data: invites } = await db.from('invitations').select('id, email, role, status, expires_at').eq('company_id', company_id).eq('status', 'pending');
         return NextResponse.json({ members: data || [], pending: invites || [] });
       }
-      case 'revoke_user': {
-        const { user_id, revoked } = body;
-        await db.from('profiles').update({ status: revoked ? 'revoked' : 'active' }).eq('id', user_id);
+      case 'remove_from_company': {
+        // B2B off-boarding: detach the member from the company. They revert to a
+        // normal free individual (B2C) — not banned, just no longer corporate.
+        const { user_id } = body;
+        await db.from('profiles').update({ company_id: null, plan: 'free', role: 'employee', status: 'active' }).eq('id', user_id);
         return NextResponse.json({ ok: true });
+      }
+      case 'ban_user': {
+        // B2C revocation: block the account from logging in at all (reversible).
+        // Accepts an email (resolved via profiles) or a user_id. Validates that
+        // the account exists and isn't already in the requested state.
+        const { email, user_id, banned } = body as { email?: string; user_id?: string; banned?: boolean };
+        let id = user_id;
+        if (!id && email) {
+          const { data: p } = await db.from('profiles').select('id').ilike('email', String(email).trim()).maybeSingle();
+          if (!p) return NextResponse.json({ error: 'user_not_found' }, { status: 404 });
+          id = p.id;
+        }
+        if (!id) return NextResponse.json({ error: 'email or user_id required' }, { status: 400 });
+        const { data: got, error: getErr } = await db.auth.admin.getUserById(id);
+        if (getErr || !got?.user) return NextResponse.json({ error: 'user_not_found' }, { status: 404 });
+        const bu = (got.user as any).banned_until as string | null | undefined;
+        const isBanned = !!bu && new Date(bu) > new Date();
+        if (banned && isBanned) return NextResponse.json({ error: 'already_banned' }, { status: 409 });
+        if (!banned && !isBanned) return NextResponse.json({ error: 'not_banned' }, { status: 409 });
+        const { error } = await db.auth.admin.updateUserById(id, { ban_duration: banned ? '876000h' : 'none' });
+        if (error) throw error;
+        return NextResponse.json({ ok: true, banned: !!banned });
+      }
+      case 'list_b2c_users': {
+        // Individual (non-corporate) users for the ban/unban picker, annotated
+        // with their current ban state. Search is a case-insensitive email match.
+        const { search } = body as { search?: string };
+        let q = db.from('profiles').select('id, email, full_name').is('company_id', null).order('email').limit(50);
+        if (search?.trim()) q = q.ilike('email', `%${search.trim()}%`);
+        const { data: profs } = await q;
+        // Map ban state from Auth (paginated; covers current scale).
+        const { data: list } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const banMap = new Map<string, boolean>();
+        for (const u of list?.users || []) {
+          const bu = (u as any).banned_until as string | null | undefined;
+          banMap.set(u.id, !!bu && new Date(bu) > new Date());
+        }
+        const users = (profs || []).map((p: any) => ({ id: p.id, email: p.email, full_name: p.full_name, banned: banMap.get(p.id) || false }));
+        return NextResponse.json({ users });
+      }
+      case 'list_company_jds': {
+        const { company_id } = body;
+        const { data } = await db.from('job_descriptions')
+          .select('id, title, content, created_at')
+          .eq('company_id', company_id).eq('visibility', 'company')
+          .order('created_at', { ascending: false });
+        return NextResponse.json({ jds: data || [] });
+      }
+      case 'update_company_jd': {
+        const { id, title, content } = body;
+        if (!id || !title?.trim() || !content?.trim()) return NextResponse.json({ error: 'id, title, content required' }, { status: 400 });
+        const { data, error } = await db.from('job_descriptions')
+          .update({ title: title.trim(), content: content.trim() })
+          .eq('id', id).eq('visibility', 'company').select().single();
+        if (error) throw error;
+        return NextResponse.json({ jd: data });
+      }
+      case 'delete_company_jd': {
+        const { id } = body;
+        await db.from('job_descriptions').delete().eq('id', id).eq('visibility', 'company');
+        return NextResponse.json({ ok: true });
+      }
+      case 'set_member_role': {
+        // Promote/demote an EXISTING company member between manager and employee.
+        // This is how a company created before the invite flow (or any company)
+        // gets — or changes — its manager. The manager's own email domain becomes
+        // the company's invitation filter, so new invites must match it.
+        const { user_id, role } = body as { user_id?: string; role?: string };
+        if (!user_id || (role !== 'manager' && role !== 'employee')) {
+          return NextResponse.json({ error: 'user_id and role (manager|employee) required' }, { status: 400 });
+        }
+        const { data: target } = await db.from('profiles').select('id, email, company_id, role').eq('id', user_id).single();
+        if (!target || !target.company_id) return NextResponse.json({ error: 'not_in_company' }, { status: 404 });
+        await db.from('profiles').update({ role }).eq('id', user_id);
+        let domain: string | null = null;
+        // Only auto-set the invite domain when the company follows its manager.
+        if (role === 'manager' && target.email?.includes('@')) {
+          const { data: comp } = await db.from('companies').select('domain_mode').eq('id', target.company_id).single();
+          if (comp?.domain_mode === 'manager') {
+            domain = target.email.split('@')[1].toLowerCase();
+            await db.from('companies').update({ allowed_email_domain: domain }).eq('id', target.company_id);
+          }
+        }
+        return NextResponse.json({ ok: true, role, allowed_email_domain: domain });
       }
       case 'upload_company_jd': {
         const { company_id, title, content } = body;
