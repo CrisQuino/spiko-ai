@@ -33,12 +33,51 @@ export interface TopUser {
   total_cost: number;
   avg_cost_per_lesson: number;
   last_lesson_at: string;
+  total_tokens: number;
 }
 
 export interface CEFRDistribution {
   level: string;
   count: number;
   percentage: number;
+}
+
+export interface CEFRByLanguage {
+  language: string; // 'en' | 'fr' | 'pt' | 'unknown'
+  level: string;
+  count: number;
+}
+
+export interface AdminLesson {
+  lesson_id: string;
+  user_id: string;
+  email: string | null;
+  completed_at: string;
+  language: string; // 'en' | 'fr' | 'pt' | 'unknown'
+  total_cost: number;
+  total_tokens: number;
+  cefr_overall: string | null;
+  target_level: string | null;
+  duration_seconds: number | null;
+  scenario_title: string | null;
+}
+
+/**
+ * Fetch every completed lesson (admin-only, bypasses RLS via the postgres-owned
+ * admin_lessons_detail view). The admin dashboard computes ALL panels/KPIs from
+ * this single dataset so one language filter + date range drives everything.
+ */
+export async function getAdminLessons(): Promise<AdminLesson[]> {
+  const { data, error } = await supabase
+    .from('admin_lessons_detail')
+    .select('*')
+    .order('completed_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching admin lessons:', error);
+    return [];
+  }
+  return (data || []) as AdminLesson[];
 }
 
 export interface KPIMetrics {
@@ -113,6 +152,23 @@ export async function getCEFRDistribution(): Promise<CEFRDistribution[]> {
 
   if (error) {
     console.error('Error fetching CEFR distribution:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+/**
+ * Fetch CEFR distribution split by practice language (for the Global/EN/FR/PT
+ * selector). The admin page aggregates these rows client-side.
+ */
+export async function getCEFRByLanguage(): Promise<CEFRByLanguage[]> {
+  const { data, error } = await supabase
+    .from('admin_cefr_by_language')
+    .select('*');
+
+  if (error) {
+    console.error('Error fetching CEFR by language:', error);
     return [];
   }
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
 interface Profile {
   id: string;
@@ -23,6 +24,7 @@ interface Company {
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { d } = useUi();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
@@ -132,7 +134,7 @@ export default function SettingsPage() {
 
       if (error) throw error;
 
-      setMessage('You are now a manager! Refreshing...');
+      setMessage(d.settings.nowManager);
       setTimeout(() => {
         window.location.reload();
       }, 1500);
@@ -152,7 +154,7 @@ export default function SettingsPage() {
 
       if (error) throw error;
 
-      setMessage('You are now an employee! Refreshing...');
+      setMessage(d.settings.nowEmployee);
       setTimeout(() => {
         window.location.reload();
       }, 1500);
@@ -166,7 +168,7 @@ export default function SettingsPage() {
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-accent-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading settings...</p>
+          <p className="text-gray-600">{d.settings.loading}</p>
         </div>
       </div>
     );
@@ -175,17 +177,18 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-accent-50">
       <div className="container mx-auto px-6 py-8 max-w-4xl">
+        <div className="flex justify-end mb-4"><LanguageSwitcher /></div>
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-display font-bold text-gray-800">Settings</h1>
-            <p className="text-gray-600">Manage your account and company</p>
+            <h1 className="text-3xl font-display font-bold text-gray-800">{d.settings.title}</h1>
+            <p className="text-gray-600">{d.settings.subtitle}</p>
           </div>
           <Link
             href="/dashboard"
             className="px-4 py-2 text-gray-600 hover:text-primary-600 transition-colors"
           >
-            ← Back to Dashboard
+            ← {d.settings.back}
           </Link>
         </div>
 
@@ -197,18 +200,18 @@ export default function SettingsPage() {
 
         {/* Profile Info */}
         <div className="glass rounded-2xl p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Profile Information</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">{d.settings.profileInfo}</h2>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-gray-600">Name:</span>
+              <span className="text-gray-600">{d.settings.name}:</span>
               <span className="font-medium text-gray-800">{profile?.full_name}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Email:</span>
+              <span className="text-gray-600">{d.settings.email}:</span>
               <span className="font-medium text-gray-800">{profile?.email}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Current Role:</span>
+              <span className="text-gray-600">{d.settings.currentRole}:</span>
               <span className="font-semibold text-primary-600 capitalize">{profile?.role}</span>
             </div>
           </div>
@@ -216,20 +219,20 @@ export default function SettingsPage() {
 
         {/* Company Section */}
         <div className="glass rounded-2xl p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Company</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">{d.settings.company}</h2>
           
           {company ? (
             <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-gray-600">Company Name:</span>
+                <span className="text-gray-600">{d.settings.companyName}:</span>
                 <span className="font-medium text-gray-800">{company.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Plan:</span>
+                <span className="text-gray-600">{d.settings.plan}:</span>
                 <span className="font-medium text-gray-800 capitalize">{company.plan}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Max Users:</span>
+                <span className="text-gray-600">{d.settings.maxUsers}:</span>
                 <span className="font-medium text-gray-800">{company.max_users}</span>
               </div>
               
@@ -239,19 +242,19 @@ export default function SettingsPage() {
                     href="/dashboard/team"
                     className="inline-block px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-all"
                   >
-                    View Team Dashboard →
+                    {d.settings.viewTeam} →
                   </Link>
                 </div>
               )}
             </div>
           ) : (
             <div>
-              <p className="text-gray-600 mb-4">You don't have a company yet. Create one to access team features.</p>
+              <p className="text-gray-600 mb-4">{d.settings.noCompany}</p>
               
               <form onSubmit={handleCreateCompany} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Company Name
+                    {d.settings.companyName}
                   </label>
                   <input
                     type="text"
@@ -259,7 +262,7 @@ export default function SettingsPage() {
                     onChange={(e) => setCompanyName(e.target.value)}
                     required
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="Acme Corp"
+                    placeholder={d.settings.companyPlaceholder}
                   />
                 </div>
                 
@@ -268,7 +271,7 @@ export default function SettingsPage() {
                   disabled={creatingCompany}
                   className="w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-accent-500 text-white font-semibold rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
                 >
-                  {creatingCompany ? 'Creating...' : 'Create Company & Become Admin'}
+                  {creatingCompany ? d.settings.creating : d.settings.createCompany}
                 </button>
               </form>
             </div>
@@ -278,11 +281,11 @@ export default function SettingsPage() {
         {/* Role Management (Development Only) */}
         <div className="glass rounded-2xl p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">
-            Role Management 
-            <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">DEV ONLY</span>
+            {d.settings.roleMgmt} 
+            <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">{d.settings.devOnly}</span>
           </h2>
           <p className="text-sm text-gray-600 mb-4">
-            For testing purposes. In production, only admins can change roles.
+            {d.settings.roleHelp}
           </p>
           
           <div className="flex gap-3">
@@ -291,7 +294,7 @@ export default function SettingsPage() {
               disabled={profile?.role === 'employee'}
               className="flex-1 px-4 py-2 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              {profile?.role === 'employee' ? '✓ Employee' : 'Become Employee'}
+              {profile?.role === 'employee' ? '✓ ' + d.settings.employee : d.settings.becomeEmployee}
             </button>
             
             <button
@@ -299,13 +302,13 @@ export default function SettingsPage() {
               disabled={profile?.role === 'manager' || !profile?.company_id}
               className="flex-1 px-4 py-2 border-2 border-primary-300 text-primary-700 rounded-lg hover:bg-primary-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              {profile?.role === 'manager' ? '✓ Manager' : 'Become Manager'}
+              {profile?.role === 'manager' ? '✓ ' + d.settings.manager : d.settings.becomeManager}
             </button>
           </div>
           
           {!profile?.company_id && (
             <p className="text-xs text-gray-500 mt-2">
-              * You need a company to become a manager
+              * {d.settings.needCompany}
             </p>
           )}
         </div>
@@ -319,7 +322,7 @@ export default function SettingsPage() {
             }}
             className="text-red-600 hover:text-red-700 font-medium"
           >
-            Sign Out
+            {d.settings.signOut}
           </button>
         </div>
       </div>

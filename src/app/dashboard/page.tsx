@@ -6,9 +6,11 @@ import { supabase, getUserProfile, getUserConversations, getUserStats, type Prof
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import PracticeSetup from '@/components/PracticeSetup';
+import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { d } = useUi();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -159,6 +161,7 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
+        <div className="flex justify-end mb-4"><LanguageSwitcher /></div>
         {/* Welcome */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
@@ -166,10 +169,10 @@ export default function DashboardPage() {
           className="mb-8"
         >
           <h2 className="text-3xl font-bold font-mono gradient-text mb-2">
-            Welcome back, {firstName}! 👋
+            {d.dashboard.welcome}, {firstName}! 👋
           </h2>
           <p className="text-gray-600 font-mono text-sm">
-            <span className="text-gray-400">// </span>Track your progress and improve your technical English
+            <span className="text-gray-400">// </span>{d.dashboard.subtitle}
           </p>
         </motion.div>
 
@@ -179,28 +182,28 @@ export default function DashboardPage() {
             icon="📚"
             title="totalConversations"
             value={stats?.totalConversations || 0}
-            subtitle={`${stats?.totalConversations || 0} completed`}
+            subtitle={`${stats?.totalConversations || 0} ${d.dashboard.completed}`}
             delay={0}
           />
           <StatCard
             icon="✅"
             title="averageScore"
             value={`${stats?.averageScore || 0}/100`}
-            subtitle="Overall performance"
+            subtitle={d.dashboard.overall}
             delay={0.1}
           />
           <StatCard
             icon="⏱"
             title="practice_time"
             value={`${stats?.totalTimeMinutes || 0}m`}
-            subtitle="Total speaking time"
+            subtitle={d.dashboard.speakingTime}
             delay={0.2}
           />
           <StatCard
             icon="⚡"
             title="last_activity"
-            value={stats?.lastActivity ? 'Recently' : 'No activity'}
-            subtitle="Most recent session"
+            value={stats?.lastActivity ? d.dashboard.recently : d.dashboard.noActivity}
+            subtitle={d.dashboard.mostRecent}
             delay={0.3}
           />
         </div>
@@ -338,9 +341,9 @@ export default function DashboardPage() {
                 <span className="text-gray-400">// </span>improvement_tips
               </h3>
               <div className="space-y-4">
-                <Tip number={1} text="Practice daily for 10-15 minutes for best results" />
-                <Tip number={2} text="Focus on technical vocabulary specific to your role" />
-                <Tip number={3} text="Try different difficulty levels to challenge yourself" />
+                <Tip number={1} text={d.dashboard.tips[0]} />
+                <Tip number={2} text={d.dashboard.tips[1]} />
+                <Tip number={3} text={d.dashboard.tips[2]} />
               </div>
             </motion.div>
           </div>

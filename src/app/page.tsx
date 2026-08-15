@@ -5,105 +5,20 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
-// Features data
-const features = [
-  {
-    icon: '🎙',
-    title: 'Voice-First Practice',
-    description: 'Practice speaking with AI that responds naturally. Build confidence in real conversations, not textbooks.'
-  },
-  {
-    icon: '🔥',
-    title: 'Real Production Scenarios',
-    description: 'Database crashes, network outages, deployment failures—practice the incidents you will actually face.'
-  },
-  {
-    icon: '⚡',
-    title: 'Instant Feedback',
-    description: 'Get real-time corrections on pronunciation, technical vocabulary, and communication clarity.'
-  },
-  {
-    icon: '🎯',
-    title: 'Role-Based Training',
-    description: 'Tailored scenarios for DBAs, DevOps, SREs, and Backend Engineers. Practice your specific domain.'
-  },
-  {
-    icon: '📊',
-    title: 'Progress Tracking',
-    description: 'See your improvement over time with detailed analytics on fluency, vocabulary, and response speed.'
-  },
-  {
-    icon: '🤖',
-    title: 'Claude Sonnet 4 Powered',
-    description: 'Powered by the most advanced AI to simulate realistic technical conversations and emergencies.'
-  }
-];
-
-// How it works steps
-const steps = [
-  {
-    title: 'Choose Your Scenario',
-    description: 'Select from database failures, network issues, deployment problems, or custom incidents based on your role.'
-  },
-  {
-    title: 'Start Conversation',
-    description: 'Speak with AI characters (PMs, engineers, customers) who react realistically to your responses.'
-  },
-  {
-    title: 'Get Feedback & Improve',
-    description: 'Receive instant corrections and suggestions. Review transcripts and track your progress over time.'
-  }
-];
-
-// Pricing plans
-const pricingPlans = [
-  {
-    name: 'Starter',
-    price: 0,
-    cta: 'Start Free',
-    popular: false,
-    features: [
-      '3 scenarios per month',
-      'Basic feedback',
-      'Progress tracking',
-      'Community support'
-    ]
-  },
-  {
-    name: 'Pro',
-    price: 12,
-    cta: 'Go Pro',
-    popular: true,
-    features: [
-      'Unlimited scenarios',
-      'Advanced AI feedback',
-      'Custom scenarios',
-      'Voice analytics',
-      'Priority support',
-      'Export transcripts'
-    ]
-  },
-  {
-    name: 'Team',
-    price: 299,
-    cta: 'Contact Sales',
-    popular: false,
-    features: [
-      'Everything in Pro',
-      'Team dashboard',
-      'SSO integration',
-      'Custom integrations',
-      'Dedicated support',
-      'Up to 50 users'
-    ]
-  }
+// Prices + which plan is highlighted (not translated).
+const PLAN_META = [
+  { price: 0, popular: false },
+  { price: 12, popular: true },
+  { price: 299, popular: false },
 ];
 
 export default function Home() {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
+  const { d } = useUi();
   
   useEffect(() => {
     checkAuth();
@@ -172,7 +87,7 @@ export default function Home() {
           </div>
 
           <div className="md:hidden flex items-center space-x-4">
-            <button 
+            <button
               onClick={handleLogin}
               className="text-sm text-gray-700 hover:text-cyan-600 font-mono font-medium"
             >
@@ -203,6 +118,7 @@ export default function Home() {
         </div>
 
         <div className="container mx-auto max-w-6xl">
+          <div className="flex justify-end mb-4"><LanguageSwitcher className="text-gray-700" /></div>
           <motion.div
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -233,7 +149,7 @@ export default function Home() {
                 <span className="text-gray-400 text-3xl md:text-4xl">()</span>
               </div>
               <div className="font-sans text-4xl md:text-5xl text-gray-800 mt-4">
-                Code Your Communication
+                {d.hero.tagline}
               </div>
             </h1>
 
@@ -248,8 +164,8 @@ export default function Home() {
               </div>
               <pre className="text-sm md:text-base font-mono overflow-x-auto">
                 <code>
-                  <span className="text-gray-500">// Practice technical English through</span>{'\n'}
-                  <span className="text-gray-500">// real production incident simulations</span>{'\n'}
+                  <span className="text-gray-500">// {d.hero.readme1}</span>{'\n'}
+                  <span className="text-gray-500">// {d.hero.readme2}</span>{'\n'}
                   {'\n'}
                   <span className="text-purple-400">import</span> <span className="text-blue-400">{'{'}</span> <span className="text-emerald-400">AI, Voice, RealScenarios</span> <span className="text-blue-400">{'}'}</span> <span className="text-purple-400">from</span> <span className="text-yellow-300">&apos;speeck.ai&apos;</span><span className="text-gray-400">;</span>{'\n'}
                   {'\n'}
@@ -289,15 +205,15 @@ export default function Home() {
             >
               <div className="flex items-center space-x-2">
                 <span className="text-emerald-600">●</span>
-                <span className="text-gray-600">Claude Sonnet 4 powered</span>
+                <span className="text-gray-600">{d.hero.badge1}</span>
               </div>
               <div className="flex items-center space-x-2">
                 <span className="text-cyan-600">●</span>
-                <span className="text-gray-600">Real-time voice feedback</span>
+                <span className="text-gray-600">{d.hero.badge2}</span>
               </div>
               <div className="flex items-center space-x-2">
                 <span className="text-blue-600">●</span>
-                <span className="text-gray-600">24/7 incident scenarios</span>
+                <span className="text-gray-600">{d.hero.badge3}</span>
               </div>
             </motion.div>
           </motion.div>
@@ -307,6 +223,7 @@ export default function Home() {
       {/* Features Section */}
       <section id="features" className="py-20 px-6">
         <div className="container mx-auto max-w-6xl">
+          <div className="flex justify-end mb-4"><LanguageSwitcher className="text-gray-700" /></div>
           <motion.div
             initial={{ y: 30, opacity: 0 }}
             whileInView={{ y: 0, opacity: 1 }}
@@ -315,7 +232,7 @@ export default function Home() {
           >
             <div className="font-mono text-sm text-gray-500 mb-2">// core.features</div>
             <h2 className="text-4xl md:text-5xl font-bold mb-4">
-              Why Engineers Choose <span className="gradient-text font-mono">SPEECK</span>
+              {d.features.titlePre} <span className="gradient-text font-mono">{d.features.titleHi}</span>
             </h2>
             <p className="text-xl text-gray-600 font-mono text-sm">
               <span className="text-gray-400">practice</span>(<span className="text-emerald-600">&apos;scenarios_you_will_face&apos;</span>)
@@ -323,7 +240,7 @@ export default function Home() {
           </motion.div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {features.map((feature, index) => (
+            {d.features.items.map((feature, index) => (
               <motion.div
                 key={index}
                 initial={{ y: 30, opacity: 0 }}
@@ -352,12 +269,12 @@ export default function Home() {
           >
             <div className="font-mono text-sm text-gray-500 mb-2">// workflow.steps</div>
             <h2 className="text-4xl md:text-5xl font-bold mb-4">
-              Get Fluent in <span className="gradient-text font-mono">3 Steps</span>
+              {d.steps.titlePre} <span className="gradient-text font-mono">{d.steps.titleHi}</span>
             </h2>
           </motion.div>
 
           <div className="space-y-12">
-            {steps.map((step, index) => (
+            {d.steps.items.map((step, index) => (
               <motion.div
                 key={index}
                 initial={{ x: index % 2 === 0 ? -30 : 30, opacity: 0 }}
@@ -381,6 +298,7 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="py-20 px-6">
         <div className="container mx-auto max-w-6xl">
+          <div className="flex justify-end mb-4"><LanguageSwitcher className="text-gray-700" /></div>
           <motion.div
             initial={{ y: 30, opacity: 0 }}
             whileInView={{ y: 0, opacity: 1 }}
@@ -389,7 +307,7 @@ export default function Home() {
           >
             <div className="font-mono text-sm text-gray-500 mb-2">// pricing.plans</div>
             <h2 className="text-4xl md:text-5xl font-bold mb-4">
-              Simple, Transparent <span className="gradient-text font-mono">Pricing</span>
+              {d.pricing.titlePre} <span className="gradient-text font-mono">{d.pricing.titleHi}</span>
             </h2>
             <p className="text-xl text-gray-600 font-mono text-sm">
               <span className="text-gray-400">choose</span>(<span className="text-emerald-600">&apos;your_plan&apos;</span>)
@@ -397,7 +315,7 @@ export default function Home() {
           </motion.div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            {pricingPlans.map((plan, index) => (
+            {d.pricing.plans.map((plan, index) => (
               <motion.div
                 key={index}
                 initial={{ y: 30, opacity: 0 }}
@@ -405,32 +323,32 @@ export default function Home() {
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
                 className={`glass rounded-2xl p-8 ${
-                  plan.popular 
+                  PLAN_META[index].popular 
                     ? 'ring-2 ring-cyan-500 shadow-2xl scale-105' 
                     : 'border border-gray-200/50'
                 }`}
               >
-                {plan.popular && (
+                {PLAN_META[index].popular && (
                   <div className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white text-sm font-mono font-bold px-4 py-1 rounded-full inline-block mb-4">
-                    POPULAR
+                    {d.pricing.popular}
                   </div>
                 )}
                 
                 <h3 className="text-2xl font-bold mb-2 font-mono">{plan.name}</h3>
                 <div className="mb-6">
-                  <span className="text-5xl font-bold font-mono">${plan.price}</span>
-                  {plan.price > 0 && <span className="text-gray-600 font-mono text-sm">/mo</span>}
+                  <span className="text-5xl font-bold font-mono">${PLAN_META[index].price}</span>
+                  {PLAN_META[index].price > 0 && <span className="text-gray-600 font-mono text-sm">{d.pricing.perMo}</span>}
                 </div>
 
                 <Link
                   href="/auth/signup"
                   className={`block w-full text-center py-3 rounded-xl font-mono font-semibold transition-all mb-6 ${
-                    plan.popular
+                    PLAN_META[index].popular
                       ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:shadow-xl'
                       : 'glass border-2 border-gray-300 hover:border-cyan-500'
                   }`}
                 >
-                  {plan.cta}()
+                  {plan.cta}
                 </Link>
 
                 <ul className="space-y-3">
@@ -471,7 +389,7 @@ export default function Home() {
           
           <div className="mt-8 pt-8 border-t border-gray-200 text-center">
             <p className="text-gray-600 font-mono text-sm">
-              © 2025 SPEECK.AI • <span className="text-gray-400">// Built for engineers, by engineers</span>
+              © 2025 SPEECK.AI • <span className="text-gray-400">// {d.footer.tagline}</span>
             </p>
           </div>
         </div>

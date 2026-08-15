@@ -364,7 +364,8 @@ export default function DemoPage() {
               clarificationCount,
               assessment, // Include the client assessment
               scenarioTitle: scenarioTitleRef.current,
-              targetLevel: levelRef.current // selected CEFR target ('' = auto)
+              targetLevel: levelRef.current, // selected CEFR target ('' = auto)
+              language: languageRef.current.code // en | fr | pt
             })
           })
             .then(response => {

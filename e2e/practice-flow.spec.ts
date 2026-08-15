@@ -68,7 +68,7 @@ async function finalizeSession(messages: Array<{ role: string; content: string }
   await fetch(`${BASE}/api/lesson/complete`, {
     method: 'POST',
     headers: auth,
-    body: JSON.stringify({ lessonId: started.lessonId, messages, durationSeconds: 180, tokenUsage: { input, output }, assessment: evalRes.assessment, scenarioTitle, targetLevel }),
+    body: JSON.stringify({ lessonId: started.lessonId, messages, durationSeconds: 180, tokenUsage: { input, output }, assessment: evalRes.assessment, scenarioTitle, targetLevel, language }),
   });
   return started.lessonId as string;
 }

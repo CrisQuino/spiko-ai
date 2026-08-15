@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
 export default function InvitePage({ params }: { params: { token: string } }) {
   const router = useRouter();
+  const { d } = useUi();
   const [loading, setLoading] = useState(true);
   const [invitation, setInvitation] = useState<any>(null);
   const [company, setCompany] = useState<any>(null);
@@ -107,7 +109,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-accent-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading invitation...</p>
+          <p className="text-gray-600">{d.invite.loading}</p>
         </div>
       </div>
     );
@@ -122,13 +124,13 @@ export default function InvitePage({ params }: { params: { token: string } }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Invalid Invitation</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">{d.invite.invalid}</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <Link
             href="/"
             className="inline-block px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-all"
           >
-            Go to Home
+            {d.invite.goHome}
           </Link>
         </div>
       </div>
@@ -139,6 +141,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-accent-50 flex items-center justify-center p-4">
       <div className="glass rounded-3xl p-8 w-full max-w-md">
+        <div className="flex justify-end mb-2"><LanguageSwitcher className="text-gray-600" /></div>
         <div className="text-center mb-6">
           <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -146,19 +149,19 @@ export default function InvitePage({ params }: { params: { token: string } }) {
             </svg>
           </div>
           <h1 className="text-3xl font-display font-bold bg-gradient-to-r from-primary-600 to-accent-600 bg-clip-text text-transparent mb-2">
-            You're Invited!
+            {d.invite.title}
           </h1>
-          <p className="text-gray-600">Join your team on SPEECK.AI</p>
+          <p className="text-gray-600">{d.invite.subtitle}</p>
         </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
           <p className="text-sm text-gray-600 mb-3">
-            <strong>{company?.name}</strong> has invited you to join their team as a{' '}
+            <strong>{company?.name}</strong> {d.invite.invitedAs}{' '}
             <strong className="capitalize">{invitation?.role}</strong>
           </p>
           <div className="text-xs text-gray-500 space-y-1">
-            <p>• Email: {invitation?.email}</p>
-            <p>• Expires: {new Date(invitation?.expires_at).toLocaleDateString()}</p>
+            <p>• {d.invite.email}: {invitation?.email}</p>
+            <p>• {d.invite.expires}: {new Date(invitation?.expires_at).toLocaleDateString()}</p>
           </div>
         </div>
 
@@ -167,19 +170,19 @@ export default function InvitePage({ params }: { params: { token: string } }) {
             href={`/auth/signup?invite=${params.token}`}
             className="block w-full px-6 py-3 bg-gradient-to-r from-primary-500 to-accent-500 text-white font-semibold rounded-lg hover:shadow-lg transition-all text-center"
           >
-            Create Account & Join Team
+            {d.invite.createJoin}
           </Link>
           
           <Link
             href={`/auth/login?invite=${params.token}`}
             className="block w-full px-6 py-3 border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-all text-center"
           >
-            Already have an account? Sign In
+            {d.invite.haveSignIn}
           </Link>
         </div>
 
         <p className="text-xs text-gray-500 text-center mt-6">
-          By joining, you'll get access to team practice sessions and progress tracking
+          {d.invite.benefits}
         </p>
       </div>
     </div>
