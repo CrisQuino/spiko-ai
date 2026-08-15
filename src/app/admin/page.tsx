@@ -86,21 +86,25 @@ export default function AdminDashboard() {
       const k = dayKey(s);
       return (!rangeStart || k >= rangeStart) && (!rangeEnd || k <= rangeEnd);
     };
-    const buckets: Record<string, { key: string; cost: number; lessons: number; tokens: number }> = {};
+    const buckets: Record<string, { key: string; cost: number; lessons: number; tokens: number; userSet: Set<string> }> = {};
     langLessons
       .filter((l) => inRange(l.completed_at))
       .forEach((l) => {
         const key = granularity === 'day' ? dayKey(l.completed_at) : monthKey(l.completed_at);
-        if (!buckets[key]) buckets[key] = { key, cost: 0, lessons: 0, tokens: 0 };
+        if (!buckets[key]) buckets[key] = { key, cost: 0, lessons: 0, tokens: 0, userSet: new Set() };
         buckets[key].cost += Number(l.total_cost || 0);
         buckets[key].lessons += 1;
         buckets[key].tokens += Number(l.total_tokens || 0);
+        buckets[key].userSet.add(l.user_id);
       });
-    return Object.values(buckets).sort((a, b) => (a.key < b.key ? -1 : 1));
+    return Object.values(buckets)
+      .map((b) => ({ key: b.key, cost: b.cost, lessons: b.lessons, tokens: b.tokens, users: b.userSet.size }))
+      .sort((a, b) => (a.key < b.key ? -1 : 1));
   }, [langLessons, granularity, rangeStart, rangeEnd]);
 
   const maxCost = useMemo(() => Math.max(0, ...series.map((s) => s.cost)), [series]);
   const rangeTotal = useMemo(() => series.reduce((s, b) => s + b.cost, 0), [series]);
+  const maxCount = useMemo(() => Math.max(1, ...series.map((s) => Math.max(s.lessons, s.users))), [series]);
 
   // Per-user aggregate.
   const users = useMemo(() => {
@@ -245,12 +249,19 @@ export default function AdminDashboard() {
                 return (
                   <div key={b.key} className="flex-1 flex flex-col justify-end items-center h-full group relative">
                     <div
-                      className="w-full bg-gradient-to-t from-emerald-500 to-cyan-500 rounded-t hover:from-emerald-600 hover:to-cyan-600 transition-all cursor-pointer min-h-[2px]"
+                      className="w-full bg-gradient-to-t from-emerald-500 to-cyan-500 rounded-t hover:from-emerald-600 hover:to-cyan-600 transition-all cursor-pointer min-h-[2px] relative"
                       style={{ height: `${h}%` }}
                     >
+                      {/* value on top of each bar */}
+                      <span
+                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 text-[9px] font-mono text-gray-600 whitespace-nowrap"
+                        style={{ writingMode: 'vertical-rl' }}
+                      >
+                        ${b.cost.toFixed(3)}
+                      </span>
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap font-mono z-10">
                         ${b.cost.toFixed(4)}<br />
-                        {b.lessons} lessons · {b.tokens.toLocaleString()} tok<br />
+                        {b.lessons} lessons · {b.users} users · {b.tokens.toLocaleString()} tok<br />
                         {b.key}
                       </div>
                     </div>
@@ -264,6 +275,69 @@ export default function AdminDashboard() {
                 <div className="absolute inset-0 flex items-center justify-center text-gray-400 font-mono text-sm">
                   // no_data_in_range
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Activity: lessons + active users (lines, same buckets/range) */}
+      <div className="glass rounded-2xl p-6 border border-gray-200/50">
+        <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+          <h2 className="text-xl font-bold font-mono">
+            <span className="text-gray-400">// </span>activity()
+          </h2>
+          <div className="flex items-center gap-4 font-mono text-xs">
+            <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-emerald-500"></span>lessons</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-cyan-500"></span>active users</span>
+            <span className="text-gray-400">({granularity === 'day' ? 'per day' : 'per month'})</span>
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          {/* Y axis (integers) */}
+          <div className="flex flex-col justify-between h-56 text-right text-xs font-mono text-gray-400 py-1 shrink-0 w-10">
+            <span>{maxCount}</span>
+            <span>{Math.round(maxCount / 2)}</span>
+            <span>0</span>
+          </div>
+          <div className="flex-1 overflow-x-auto">
+            <div className="min-w-[500px]">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-56 border-l border-b border-gray-200">
+                <line x1="0" y1="50" x2="100" y2="50" stroke="#f3f4f6" strokeWidth="0.5" />
+                {series.length > 0 && (
+                  <>
+                    <polyline
+                      fill="none"
+                      stroke="#10b981"
+                      strokeWidth="2"
+                      vectorEffect="non-scaling-stroke"
+                      points={series
+                        .map((s, i) => `${series.length > 1 ? (i / (series.length - 1)) * 100 : 50},${100 - (s.lessons / maxCount) * 100}`)
+                        .join(' ')}
+                    />
+                    <polyline
+                      fill="none"
+                      stroke="#06b6d4"
+                      strokeWidth="2"
+                      vectorEffect="non-scaling-stroke"
+                      points={series
+                        .map((s, i) => `${series.length > 1 ? (i / (series.length - 1)) * 100 : 50},${100 - (s.users / maxCount) * 100}`)
+                        .join(' ')}
+                    />
+                  </>
+                )}
+              </svg>
+              {/* x labels */}
+              <div className="flex justify-between mt-1">
+                {series.map((s) => (
+                  <div key={s.key} className="flex-1 text-center text-[10px] text-gray-400 font-mono truncate">
+                    {granularity === 'day' ? new Date(s.key).getUTCDate() : s.key.slice(2)}
+                  </div>
+                ))}
+              </div>
+              {series.length === 0 && (
+                <p className="text-center text-gray-400 font-mono text-sm py-8">// no_data_in_range</p>
               )}
             </div>
           </div>
