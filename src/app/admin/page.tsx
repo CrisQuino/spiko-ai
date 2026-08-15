@@ -33,6 +33,7 @@ export default function AdminDashboard() {
     return d.toISOString().slice(0, 10);
   });
   const [rangeEnd, setRangeEnd] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [selectedUser, setSelectedUser] = useState<{ id: string; email: string | null } | null>(null);
 
   useEffect(() => {
     checkAdminAndLoadData();
@@ -138,7 +139,11 @@ export default function AdminDashboard() {
     return { counts, total };
   }, [langLessons]);
 
-  const recent = useMemo(() => langLessons.slice(0, 20), [langLessons]);
+  // Recent lessons: all of a selected user's lessons, else the latest 20.
+  const recent = useMemo(() => {
+    if (selectedUser) return langLessons.filter((l) => l.user_id === selectedUser.id).slice(0, 100);
+    return langLessons.slice(0, 20);
+  }, [langLessons, selectedUser]);
 
   if (loading) {
     return (
@@ -369,7 +374,14 @@ export default function AdminDashboard() {
 
           <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
             {users.map((u, i) => (
-              <div key={u.user_id} className="flex items-center justify-between p-3 bg-white/50 rounded-lg">
+              <button
+                key={u.user_id}
+                onClick={() => setSelectedUser((cur) => (cur?.id === u.user_id ? null : { id: u.user_id, email: u.email }))}
+                className={`w-full flex items-center justify-between p-3 rounded-lg text-left transition-all ${
+                  selectedUser?.id === u.user_id ? 'bg-emerald-50 ring-2 ring-emerald-400' : 'bg-white/50 hover:bg-white'
+                }`}
+                title="Click to filter recent lessons by this user"
+              >
                 <div className="flex items-center space-x-3 min-w-0">
                   <div className="w-8 h-8 shrink-0 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-mono text-sm font-bold">
                     {i + 1}
@@ -386,7 +398,7 @@ export default function AdminDashboard() {
                   <p className="font-mono text-sm font-bold text-emerald-600">${u.cost.toFixed(2)}</p>
                   <p className="font-mono text-xs text-gray-500">${(u.cost / (u.lessons || 1)).toFixed(4)}/lesson</p>
                 </div>
-              </div>
+              </button>
             ))}
             {users.length === 0 && <p className="text-center text-gray-500 font-mono text-sm py-8">// no_data_yet</p>}
           </div>
@@ -424,9 +436,23 @@ export default function AdminDashboard() {
 
       {/* Recent Lessons Table */}
       <div className="glass rounded-2xl p-6 border border-gray-200/50">
-        <h2 className="text-xl font-bold font-mono mb-4">
-          <span className="text-gray-400">// </span>recent_lessons()
-        </h2>
+        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+          <h2 className="text-xl font-bold font-mono">
+            <span className="text-gray-400">// </span>recent_lessons()
+          </h2>
+          {selectedUser && (
+            <div className="flex items-center gap-2 font-mono text-xs">
+              <span className="text-gray-500">filtered by</span>
+              <span className="px-2 py-1 rounded-md bg-emerald-100 text-emerald-700">{selectedUser.email || `${selectedUser.id.slice(0, 8)}…`}</span>
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="px-2.5 py-1 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition-all"
+              >
+                ✕ show all
+              </button>
+            </div>
+          )}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
