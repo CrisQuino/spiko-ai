@@ -33,6 +33,7 @@ export interface TopUser {
   total_cost: number;
   avg_cost_per_lesson: number;
   last_lesson_at: string;
+  total_tokens: number;
 }
 
 export interface CEFRDistribution {

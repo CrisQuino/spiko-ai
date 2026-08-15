@@ -71,7 +71,7 @@ export default function AdminDashboard() {
       const [kpiData, dailyData, usersData, cefrData, lessonsData] = await Promise.all([
         getKPIMetrics(),
         getDailyCosts(30),
-        getTopUsers(10),
+        getTopUsers(200),
         getCEFRDistribution(),
         getRecentLessons(20),
       ]);
@@ -220,9 +220,9 @@ export default function AdminDashboard() {
               const height = maxCost > 0 ? (day.total_cost / maxCost) * 100 : 0;
               
               return (
-                <div key={i} className="flex-1 flex flex-col items-center group relative">
-                  <div 
-                    className="w-full bg-gradient-to-t from-emerald-500 to-cyan-500 rounded-t hover:from-emerald-600 hover:to-cyan-600 transition-all cursor-pointer"
+                <div key={i} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+                  <div
+                    className="w-full bg-gradient-to-t from-emerald-500 to-cyan-500 rounded-t hover:from-emerald-600 hover:to-cyan-600 transition-all cursor-pointer min-h-[2px]"
                     style={{ height: `${height}%` }}
                   >
                     {/* Tooltip */}
@@ -250,31 +250,32 @@ export default function AdminDashboard() {
             <span className="text-gray-400">// </span>top_users()
           </h2>
           
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
             {topUsers.map((user, i) => (
               <div key={user.user_id} className="flex items-center justify-between p-3 bg-white/50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-mono text-sm font-bold">
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="w-8 h-8 shrink-0 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-mono text-sm font-bold">
                     {i + 1}
                   </div>
-                  <div>
-                    <p className="font-mono text-sm text-gray-800">{user.email}</p>
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm text-gray-800 truncate">{user.email}</p>
                     <p className="font-mono text-xs text-gray-500">
-                      {user.lessons_count} lessons
+                      {user.lessons_count} lessons · {Number(user.total_tokens || 0).toLocaleString()} tok
+                      {user.last_lesson_at ? ` · ${new Date(user.last_lesson_at).toLocaleDateString()}` : ''}
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0 pl-2">
                   <p className="font-mono text-sm font-bold text-emerald-600">
-                    ${(user.total_cost || 0).toFixed(2)}
+                    ${Number(user.total_cost || 0).toFixed(2)}
                   </p>
                   <p className="font-mono text-xs text-gray-500">
-                    ${((user.total_cost || 0) / (user.lessons_count || 1)).toFixed(4)}/lesson
+                    ${(Number(user.total_cost || 0) / (user.lessons_count || 1)).toFixed(4)}/lesson
                   </p>
                 </div>
               </div>
             ))}
-            
+
             {topUsers.length === 0 && (
               <p className="text-center text-gray-500 font-mono text-sm py-8">
                 // no_data_yet
