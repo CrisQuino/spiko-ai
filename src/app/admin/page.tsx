@@ -108,6 +108,8 @@ export default function AdminDashboard() {
   const costAxis = useMemo(() => (maxCost > 0 ? maxCost * 1.18 : 1), [maxCost]);
   const lessonsAxis = useMemo(() => Math.max(1, Math.ceil(Math.max(1, ...series.map((s) => s.lessons)) * 1.18)), [series]);
   const usersAxis = useMemo(() => Math.max(1, Math.ceil(Math.max(1, ...series.map((s) => s.users)) * 1.18)), [series]);
+  // X position with side padding so edge points/values don't collide with the Y axes.
+  const xAt = (i: number) => (series.length > 1 ? 8 + (i / (series.length - 1)) * 84 : 50);
 
   // Per-user aggregate.
   const users = useMemo(() => {
@@ -310,15 +312,15 @@ export default function AdminDashboard() {
                   {series.length > 1 && (
                     <>
                       <polyline fill="none" stroke="#10b981" strokeWidth="2" vectorEffect="non-scaling-stroke"
-                        points={series.map((s, i) => `${(i / (series.length - 1)) * 100},${100 - (s.lessons / lessonsAxis) * 100}`).join(' ')} />
+                        points={series.map((s, i) => `${xAt(i)},${100 - (s.lessons / lessonsAxis) * 100}`).join(' ')} />
                       <polyline fill="none" stroke="#06b6d4" strokeWidth="2" vectorEffect="non-scaling-stroke"
-                        points={series.map((s, i) => `${(i / (series.length - 1)) * 100},${100 - (s.users / usersAxis) * 100}`).join(' ')} />
+                        points={series.map((s, i) => `${xAt(i)},${100 - (s.users / usersAxis) * 100}`).join(' ')} />
                     </>
                   )}
                 </svg>
                 {/* dots + values (HTML so circles don't distort) */}
                 {series.map((s, i) => {
-                  const x = series.length > 1 ? (i / (series.length - 1)) * 100 : 50;
+                  const x = xAt(i);
                   const yl = 100 - (s.lessons / lessonsAxis) * 100;
                   const yu = 100 - (s.users / usersAxis) * 100;
                   return (
@@ -337,7 +339,7 @@ export default function AdminDashboard() {
               {/* x labels aligned to points */}
               <div className="relative h-4 mt-1">
                 {series.map((s, i) => {
-                  const x = series.length > 1 ? (i / (series.length - 1)) * 100 : 50;
+                  const x = xAt(i);
                   return (
                     <span key={s.key} className="absolute text-[10px] text-gray-400 font-mono -translate-x-1/2 whitespace-nowrap" style={{ left: `${x}%` }}>
                       {granularity === 'day' ? new Date(s.key).getUTCDate() : s.key.slice(2)}
