@@ -564,13 +564,15 @@ function LangSelector({ value, onChange }: { value: Lang; onChange: (l: Lang) =>
 // ── Super-admin management (companies + platform settings) ──────────────────
 type Company = {
   id: string; name: string; slug: string; status: string;
-  allowed_email_domain: string | null; max_users: number | null;
+  allowed_email_domain: string | null; domain_mode: string; max_users: number | null;
   daily_practice_limit: number | null; monthly_practice_limit: number | null;
   max_jds_per_user: number | null; members: number; pending_invites: number;
 };
 type Member = { id: string; email: string | null; full_name: string | null; role: string; status: string };
 type Pending = { id: string; email: string; role: string; status: string; expires_at: string };
 type Settings = { free_monthly_sessions: number; free_max_jds: number; premium_max_jds: number };
+type CompanyJd = { id: string; title: string; content: string; created_at: string };
+type ApiFn = (action: string, params?: Record<string, unknown>) => Promise<{ status: number; body: any }>;
 
 const num = (v: string) => (v === '' ? null : Number(v));
 const lim = (v: number | null) => (v == null ? '∞' : String(v));
@@ -586,6 +588,9 @@ function SuperAdminPanel() {
   const [busy, setBusy] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', allowed_email_domain: '', max_users: '5', daily_practice_limit: '', monthly_practice_limit: '', max_jds_per_user: '' });
+  const [banQuery, setBanQuery] = useState('');
+  const [b2cUsers, setB2cUsers] = useState<{ id: string; email: string; full_name: string | null; banned: boolean }[] | null>(null);
+  const [b2cLoading, setB2cLoading] = useState(false);
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
 
@@ -676,14 +681,32 @@ function SuperAdminPanel() {
     const r = await api('invite_manager', { company_id: id, email: email.trim() });
     if (r.status === 200) { flash(`✓ manager invited: ${r.body.invitation.email}`); reset(); refreshDetail(id); loadAll(); } else flash(`✕ ${r.body?.error || 'error'}`);
   };
-  const uploadJd = async (id: string, title: string, content: string, reset: () => void) => {
-    if (!title.trim() || !content.trim()) return flash('✕ title and content required');
-    const r = await api('upload_company_jd', { company_id: id, title: title.trim(), content: content.trim() });
-    if (r.status === 200) { flash('✓ company JD uploaded'); reset(); } else flash(`✕ ${r.body?.error || 'error'}`);
+  const removeFromCompany = async (id: string, m: Member) => {
+    if (!window.confirm(`Remove ${m.email} from this company? They become a free individual user (re-invite to add them back).`)) return;
+    const r = await api('remove_from_company', { user_id: m.id });
+    if (r.status === 200) { flash(`✓ ${m.email} removed from company`); refreshDetail(id); loadAll(); }
+    else flash(`✕ ${r.body?.error || 'error'}`);
   };
-  const revokeUser = async (id: string, m: Member) => {
-    const r = await api('revoke_user', { user_id: m.id, revoked: m.status !== 'revoked' });
-    if (r.status === 200) { flash(m.status !== 'revoked' ? '✓ user revoked' : '✓ user reinstated'); refreshDetail(id); }
+  const searchB2c = async () => {
+    setB2cLoading(true);
+    const r = await api('list_b2c_users', { search: banQuery.trim() });
+    setB2cLoading(false);
+    if (r.status === 200) setB2cUsers(r.body.users || []);
+    else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+  const banById = async (u: { id: string; email: string }, banned: boolean) => {
+    const r = await api('ban_user', { user_id: u.id, banned });
+    if (r.status === 200) { flash(banned ? `✓ ${u.email} banned (cannot log in)` : `✓ ${u.email} unbanned`); searchB2c(); }
+    else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+  const setMemberRole = async (id: string, m: Member, role: 'manager' | 'employee') => {
+    const r = await api('set_member_role', { user_id: m.id, role });
+    if (r.status === 200) {
+      flash(role === 'manager'
+        ? `✓ ${m.email} is now manager${r.body.allowed_email_domain ? ` · domain → @${r.body.allowed_email_domain}` : ''}`
+        : `✓ ${m.email} set to employee`);
+      refreshDetail(id); loadAll();
+    } else flash(`✕ ${r.body?.error || 'error'}`);
   };
 
   return (
@@ -776,13 +799,47 @@ function SuperAdminPanel() {
                 onSuspend={suspendCompany}
                 onDelete={deleteCompany}
                 onInvite={inviteManager}
-                onUploadJd={uploadJd}
-                onRevoke={revokeUser}
+                onRemove={removeFromCompany}
+                onSetRole={setMemberRole}
+                api={api}
+                flash={flash}
               />
             )}
           </div>
         ))}
         {companies.length === 0 && <p className="text-center text-gray-500 font-mono text-sm py-8">// no_companies_yet</p>}
+      </div>
+
+      {/* B2C account access — search a B2C user, then toggle their login access */}
+      <div className="mt-8 pt-6 border-t border-gray-200">
+        <h3 className="font-mono text-sm text-gray-500 mb-1">account_access() <span className="text-gray-400">— ban or unban an individual (B2C) login</span></h3>
+        <p className="font-mono text-xs text-gray-400 mb-3">Search a B2C (non-corporate) user, then toggle their access. A banned user cannot log in at all — reversible.</p>
+        <div className="flex flex-wrap gap-2 items-center">
+          <input
+            value={banQuery} onChange={(e) => setBanQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && searchB2c()}
+            placeholder="search by email… (blank = list all B2C users)"
+            className="flex-1 min-w-[220px] bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm"
+          />
+          <button onClick={searchB2c} disabled={b2cLoading} className="px-3 py-2 rounded-md bg-gray-800 text-white hover:bg-gray-700 font-mono text-xs disabled:opacity-50">{b2cLoading ? 'searching…' : 'search()'}</button>
+        </div>
+        {b2cUsers && (
+          <div className="mt-3 max-h-64 overflow-y-auto space-y-1 pr-1">
+            {b2cUsers.length === 0 && <p className="font-mono text-xs text-gray-400">// no_b2c_users_match</p>}
+            {b2cUsers.map((u) => (
+              <div key={u.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-white/60 font-mono text-xs">
+                <span className="truncate min-w-0">
+                  {u.email}
+                  {u.banned && <span className="ml-2 px-1.5 py-0.5 rounded bg-red-100 text-red-700">banned</span>}
+                </span>
+                {u.banned ? (
+                  <button onClick={() => banById(u, false)} className="px-2 py-1 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 shrink-0">unban()</button>
+                ) : (
+                  <button onClick={() => banById(u, true)} className="px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 shrink-0">ban()</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -797,24 +854,43 @@ function Field({ label, value, onChange, placeholder, type = 'text' }: { label: 
   );
 }
 
-function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite, onUploadJd, onRevoke }: {
+function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite, onRemove, onSetRole, api, flash }: {
   c: Company; detail?: { members: Member[]; pending: Pending[] }; busy: boolean;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   onSuspend: (c: Company) => void; onDelete: (c: Company) => void;
   onInvite: (id: string, email: string, reset: () => void) => void;
-  onUploadJd: (id: string, title: string, content: string, reset: () => void) => void;
-  onRevoke: (id: string, m: Member) => void;
+  onRemove: (id: string, m: Member) => void;
+  onSetRole: (id: string, m: Member, role: 'manager' | 'employee') => void;
+  api: ApiFn; flash: (m: string) => void;
 }) {
   const [limits, setLimits] = useState({
     max_users: String(c.max_users ?? ''),
     daily_practice_limit: c.daily_practice_limit == null ? '' : String(c.daily_practice_limit),
     monthly_practice_limit: c.monthly_practice_limit == null ? '' : String(c.monthly_practice_limit),
     max_jds_per_user: c.max_jds_per_user == null ? '' : String(c.max_jds_per_user),
-    allowed_email_domain: c.allowed_email_domain ?? '',
+    domain_mode: c.domain_mode || 'any',
   });
   const [invEmail, setInvEmail] = useState('');
-  const [jdTitle, setJdTitle] = useState('');
-  const [jdContent, setJdContent] = useState('');
+
+  // Company JDs (team-wide), managed via a scrollable list + upload/edit modal.
+  const [jds, setJds] = useState<CompanyJd[] | null>(null);
+  const [jdModal, setJdModal] = useState<null | { mode: 'new' | 'edit'; id?: string; title: string; content: string }>(null);
+  const loadJds = async () => { const r = await api('list_company_jds', { company_id: c.id }); setJds(r.body?.jds || []); };
+  useEffect(() => { loadJds(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [c.id]);
+  const saveJd = async () => {
+    if (!jdModal) return;
+    if (!jdModal.title.trim() || !jdModal.content.trim()) return flash('✕ title and content required');
+    const r = jdModal.mode === 'new'
+      ? await api('upload_company_jd', { company_id: c.id, title: jdModal.title, content: jdModal.content })
+      : await api('update_company_jd', { id: jdModal.id, title: jdModal.title, content: jdModal.content });
+    if (r.status === 200) { flash(jdModal.mode === 'new' ? '✓ company JD uploaded' : '✓ company JD updated'); setJdModal(null); loadJds(); }
+    else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+  const deleteJd = async (id: string) => {
+    if (!window.confirm('Delete this company JD? The whole team loses access to it.')) return;
+    const r = await api('delete_company_jd', { id });
+    if (r.status === 200) { flash('✓ company JD deleted'); setJdModal(null); loadJds(); }
+  };
 
   return (
     <div className="border-t border-gray-200 p-4 space-y-5">
@@ -826,8 +902,19 @@ function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite
           <Field label="Daily (∞ blank)" type="number" value={limits.daily_practice_limit} onChange={(v) => setLimits({ ...limits, daily_practice_limit: v })} />
           <Field label="Monthly (∞ blank)" type="number" value={limits.monthly_practice_limit} onChange={(v) => setLimits({ ...limits, monthly_practice_limit: v })} />
           <Field label="JDs/user (∞ blank)" type="number" value={limits.max_jds_per_user} onChange={(v) => setLimits({ ...limits, max_jds_per_user: v })} />
-          <Field label="Email domain" value={limits.allowed_email_domain} onChange={(v) => setLimits({ ...limits, allowed_email_domain: v })} />
+          <label className="block">
+            <span className="font-mono text-xs text-gray-500">Invite domain</span>
+            <select value={limits.domain_mode} onChange={(e) => setLimits({ ...limits, domain_mode: e.target.value })} className="mt-1 w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm">
+              <option value="any">Any domain</option>
+              <option value="manager">Manager&apos;s domain</option>
+            </select>
+          </label>
         </div>
+        <p className="mt-1 font-mono text-[11px] text-gray-400">
+          {limits.domain_mode === 'manager'
+            ? `Invites restricted to the manager's domain${c.allowed_email_domain ? ` (currently @${c.allowed_email_domain})` : ' (set once you assign a manager)'}.`
+            : 'Invites accept any email domain.'}
+        </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             onClick={() => onPatch(c.id, {
@@ -835,7 +922,7 @@ function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite
               daily_practice_limit: num(limits.daily_practice_limit),
               monthly_practice_limit: num(limits.monthly_practice_limit),
               max_jds_per_user: num(limits.max_jds_per_user),
-              allowed_email_domain: limits.allowed_email_domain.trim() || null,
+              domain_mode: limits.domain_mode,
             })}
             disabled={busy}
             className="px-3 py-1.5 rounded-md bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-mono text-xs disabled:opacity-50"
@@ -853,7 +940,7 @@ function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite
 
       {/* Invite manager */}
       <div>
-        <h4 className="font-mono text-xs text-gray-500 mb-2">invite_manager()</h4>
+        <h4 className="font-mono text-xs text-gray-500 mb-2">invite_manager() <span className="text-gray-400">— email a NEW manager (or promote an existing member below)</span></h4>
         <div className="flex flex-wrap gap-2">
           <input value={invEmail} onChange={(e) => setInvEmail(e.target.value)} placeholder="manager@company.com" className="flex-1 min-w-[200px] bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm" />
           <button onClick={() => onInvite(c.id, invEmail, () => setInvEmail(''))} className="px-3 py-2 rounded-md bg-gray-800 text-white hover:bg-gray-700 font-mono text-xs">
@@ -862,35 +949,57 @@ function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite
         </div>
       </div>
 
-      {/* Upload company JD */}
+      {/* Company JDs — scrollable list + upload/edit modal */}
       <div>
-        <h4 className="font-mono text-xs text-gray-500 mb-2">upload_company_jd() <span className="text-gray-400">— visible to the whole team</span></h4>
-        <div className="space-y-2">
-          <input value={jdTitle} onChange={(e) => setJdTitle(e.target.value)} placeholder="JD title" className="w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm" />
-          <textarea value={jdContent} onChange={(e) => setJdContent(e.target.value)} placeholder="Job description content…" rows={3} className="w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm" />
-          <button onClick={() => onUploadJd(c.id, jdTitle, jdContent, () => { setJdTitle(''); setJdContent(''); })} className="px-3 py-1.5 rounded-md bg-gray-800 text-white hover:bg-gray-700 font-mono text-xs">
-            upload_jd()
-          </button>
+        <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+          <h4 className="font-mono text-xs text-gray-500">company_jds() {jds ? `[${jds.length}]` : ''} <span className="text-gray-400">— visible to the whole team; click to edit</span></h4>
+          <button onClick={() => setJdModal({ mode: 'new', title: '', content: '' })} className="px-3 py-1.5 rounded-md bg-gray-800 text-white hover:bg-gray-700 font-mono text-xs">+ upload_jd()</button>
         </div>
+        {!jds ? (
+          <p className="font-mono text-xs text-gray-400">// loading…</p>
+        ) : jds.length === 0 ? (
+          <p className="font-mono text-xs text-gray-400">// no_company_jds — upload one to share with the team</p>
+        ) : (
+          <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+            {jds.map((j) => (
+              <button key={j.id} onClick={() => setJdModal({ mode: 'edit', id: j.id, title: j.title, content: j.content })} className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-white/60 hover:bg-white font-mono text-xs text-left">
+                <span className="truncate min-w-0">{j.title}</span>
+                <span className="text-gray-400 shrink-0">{new Date(j.created_at).toLocaleDateString()} · edit ›</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Members + pending */}
       <div>
-        <h4 className="font-mono text-xs text-gray-500 mb-2">members() {detail ? `[${detail.members.length}]` : ''}</h4>
+        <h4 className="font-mono text-xs text-gray-500 mb-2">
+          members() {detail ? `[${detail.members.length}]` : ''}
+          <span className="text-gray-400"> — assign a manager; the manager&apos;s email domain becomes the invite filter</span>
+        </h4>
         {!detail ? (
           <p className="font-mono text-xs text-gray-400">// loading…</p>
         ) : (
           <div className="space-y-1">
             {detail.members.map((m) => (
-              <div key={m.id} className="flex items-center justify-between px-3 py-2 rounded-md bg-white/60 font-mono text-xs">
-                <span className="truncate">
+              <div key={m.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-white/60 font-mono text-xs">
+                <span className="truncate min-w-0">
                   {m.email || `${m.id.slice(0, 8)}…`}
-                  <span className="ml-2 text-gray-400">{m.role}</span>
+                  <span className={`ml-2 px-1.5 py-0.5 rounded ${m.role === 'manager' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400'}`}>{m.role}</span>
                   {m.status === 'revoked' && <span className="ml-2 text-red-600">revoked</span>}
                 </span>
-                <button onClick={() => onRevoke(c.id, m)} className={`px-2 py-1 rounded ${m.status === 'revoked' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}>
-                  {m.status === 'revoked' ? 'reinstate' : 'revoke'}
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => onSetRole(c.id, m, m.role === 'manager' ? 'employee' : 'manager')}
+                    className={`px-2 py-1 rounded ${m.role === 'manager' ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'}`}
+                    title={m.role === 'manager' ? 'Demote to employee' : 'Promote to manager (their domain becomes the invite filter)'}
+                  >
+                    {m.role === 'manager' ? 'unset_manager' : 'make_manager'}
+                  </button>
+                  <button onClick={() => onRemove(c.id, m)} className="px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200" title="Remove from company (becomes a free individual)">
+                    remove
+                  </button>
+                </div>
               </div>
             ))}
             {detail.members.length === 0 && <p className="font-mono text-xs text-gray-400">// no_members</p>}
@@ -903,6 +1012,26 @@ function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite
           </div>
         )}
       </div>
+
+      {/* Company JD upload/edit modal */}
+      {jdModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center px-6 z-50" onClick={() => setJdModal(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="glass rounded-2xl p-6 max-w-lg w-full border border-gray-200/50">
+            <h3 className="font-mono text-sm font-bold mb-4">{jdModal.mode === 'new' ? 'upload_company_jd()' : 'edit_company_jd()'}</h3>
+            <div className="space-y-3">
+              <input value={jdModal.title} onChange={(e) => setJdModal({ ...jdModal, title: e.target.value })} placeholder="JD title" className="w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm" />
+              <textarea value={jdModal.content} onChange={(e) => setJdModal({ ...jdModal, content: e.target.value })} placeholder="Job description content…" rows={8} className="w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm" />
+              <div className="flex flex-wrap gap-2 justify-end">
+                <button onClick={() => setJdModal(null)} className="px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 font-mono text-xs">close()</button>
+                {jdModal.mode === 'edit' && (
+                  <button onClick={() => deleteJd(jdModal.id!)} className="px-3 py-1.5 rounded-md bg-red-600 text-white hover:bg-red-700 font-mono text-xs">delete()</button>
+                )}
+                <button onClick={saveJd} className="px-3 py-1.5 rounded-md bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-mono text-xs">{jdModal.mode === 'new' ? 'upload()' : 'save()'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

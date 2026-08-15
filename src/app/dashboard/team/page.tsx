@@ -83,9 +83,10 @@ export default function TeamDashboardPage() {
     load();
   };
 
-  const revoke = async (m: Member) => {
-    const r = await teamApi('revoke_member', { user_id: m.id, revoked: m.status !== 'revoked' });
-    if (r.status === 200) { flash(m.status !== 'revoked' ? '✅ Member revoked' : '✅ Member reinstated'); load(); }
+  const removeMember = async (m: Member) => {
+    if (!window.confirm(`Remove ${m.email} from the team? They become a free individual user (re-invite to add them back).`)) return;
+    const r = await teamApi('remove_member', { user_id: m.id });
+    if (r.status === 200) { flash('✅ Member removed'); load(); }
     else flash('❌ ' + (r.body?.error || 'error'));
   };
   const cancelInvite = async (p: Pending) => {
@@ -178,13 +179,13 @@ export default function TeamDashboardPage() {
                         </div>
                         <div className="flex items-center space-x-3 shrink-0">
                           <span className="tech-badge-cyan capitalize">{m.role}</span>
-                          {m.status === 'revoked' && <span className="tech-badge-orange">revoked</span>}
                           <span className="text-sm font-mono text-gray-600"><span className="text-emerald-600">{m.sessions}</span> {d.team.sessions}</span>
                           {m.id !== selfId && m.role !== 'manager' && (
                             <button
-                              onClick={() => revoke(m)}
-                              className={`px-3 py-1.5 rounded-md font-mono text-xs ${m.status === 'revoked' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
-                            >{m.status === 'revoked' ? 'reinstate()' : 'revoke()'}</button>
+                              onClick={() => removeMember(m)}
+                              className="px-3 py-1.5 rounded-md font-mono text-xs bg-red-100 text-red-700 hover:bg-red-200"
+                              title="Remove from team (becomes a free individual)"
+                            >remove()</button>
                           )}
                         </div>
                       </div>

@@ -140,29 +140,27 @@ async function main() {
     check('12 re-accept used invite blocked', r.status === 400 && r.body.error === 'used', `${r.status}:${r.body.error}`);
   }
 
-  // 13) cannot revoke self
-  check('13 revoke self blocked', (await team('revoke_member', { user_id: mgrId, revoked: true }, mgrTok)).body.error === 'cannot_revoke_self');
+  // 13) cannot remove self
+  check('13 remove self blocked', (await team('remove_member', { user_id: mgrId }, mgrTok)).body.error === 'cannot_remove_self');
 
-  // 14) revoke someone not in team
+  // 14) remove someone not in team
   {
-    const r = await team('revoke_member', { user_id: '00000000-0000-0000-0000-000000000000', revoked: true }, mgrTok);
-    check('14 revoke not_in_team', r.status === 404 && r.body.error === 'not_in_team', `${r.status}:${r.body.error}`);
+    const r = await team('remove_member', { user_id: '00000000-0000-0000-0000-000000000000' }, mgrTok);
+    check('14 remove not_in_team', r.status === 404 && r.body.error === 'not_in_team', `${r.status}:${r.body.error}`);
   }
 
-  // 15) revoke + reinstate alice
+  // 15) remove alice → she becomes a free individual (detached from the company)
   {
-    const r1 = await team('revoke_member', { user_id: aliceId, revoked: true }, mgrTok);
-    const s1 = (await dbRow(`/rest/v1/profiles?select=status&id=eq.${aliceId}`))[0].status;
-    const r2 = await team('revoke_member', { user_id: aliceId, revoked: false }, mgrTok);
-    const s2 = (await dbRow(`/rest/v1/profiles?select=status&id=eq.${aliceId}`))[0].status;
-    check('15 revoke + reinstate member', r1.status === 200 && s1 === 'revoked' && r2.status === 200 && s2 === 'active', `${s1}->${s2}`);
+    const r = await team('remove_member', { user_id: aliceId }, mgrTok);
+    const prof = (await dbRow(`/rest/v1/profiles?select=company_id,plan,role&id=eq.${aliceId}`))[0];
+    check('15 remove_member → free individual', r.status === 200 && prof.company_id === null && prof.plan === 'free' && prof.role === 'employee', JSON.stringify(prof));
   }
 
-  // 16) manager cannot be revoked by another manager (seat a 2nd manager)
+  // 16) manager cannot be removed by another manager (seat a 2nd manager)
   {
     const m2 = `mgr2@${DOMAIN}`; const m2id = await ensureUser(m2); await setProfile(m2id, m2, { company_id: cid, role: 'manager', plan: 'corporate' });
-    const r = await team('revoke_member', { user_id: m2id, revoked: true }, mgrTok);
-    check('16 cannot revoke another manager', r.status === 403 && r.body.error === 'cannot_revoke_manager', `${r.status}:${r.body.error}`);
+    const r = await team('remove_member', { user_id: m2id }, mgrTok);
+    check('16 cannot remove another manager', r.status === 403 && r.body.error === 'cannot_remove_manager', `${r.status}:${r.body.error}`);
     await admin(`/rest/v1/profiles?id=eq.${m2id}`, { method: 'PATCH', body: JSON.stringify({ company_id: null, role: 'employee' }) });
   }
 
