@@ -533,7 +533,7 @@ export default function AdminDashboard() {
 function LangSelector({ value, onChange }: { value: Lang; onChange: (l: Lang) => void }) {
   return (
     <div className="flex gap-1 items-center">
-      <span className="font-mono text-xs text-gray-400 mr-1">lang:</span>
+      <span className="font-mono text-xs text-gray-400 mr-1">Filter:</span>
       {(['global', 'en', 'fr', 'pt'] as const).map((opt) => (
         <button
           key={opt}

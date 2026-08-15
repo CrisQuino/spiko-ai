@@ -28,6 +28,9 @@ type Dict = {
     welcome: string; subtitle: string; completed: string; overall: string;
     speakingTime: string; recently: string; noActivity: string; mostRecent: string; tips: string[];
   };
+  auth: { loginSubtitle: string; signupSubtitle: string; orEmail: string; orCreate: string; namePlaceholder: string; companyPlaceholder: string; createAccount: string; haveAccount: string };
+  session: { fallbackTitle: string; level: string; tokens: string; jargon: string; terms: string; skills: { pronunciation: string; fluency: string; vocabulary: string; grammar: string; interaction: string; comprehension: string } };
+  invite: { loading: string; invalid: string; goHome: string; title: string; subtitle: string; invitedAs: string; email: string; expires: string; createJoin: string; haveSignIn: string; benefits: string };
 };
 
 const FEATURE_ICONS = ['🎙', '🔥', '⚡', '🎯', '📊', '🤖'];
@@ -84,6 +87,9 @@ const en: Dict = {
       'Try different difficulty levels to challenge yourself',
     ],
   },
+  auth: { loginSubtitle: 'Access your training dashboard', signupSubtitle: 'Start your English training', orEmail: 'or use email', orCreate: 'or create account', namePlaceholder: 'Your Name', companyPlaceholder: 'Company Name', createAccount: 'create account', haveAccount: 'already have account' },
+  session: { fallbackTitle: 'Practice session', level: 'level', tokens: 'tokens', jargon: 'technical jargon', terms: 'terms', skills: { pronunciation: 'Pronunciation', fluency: 'Fluency', vocabulary: 'Vocabulary', grammar: 'Grammar', interaction: 'Interaction', comprehension: 'Comprehension' } },
+  invite: { loading: 'Loading invitation...', invalid: 'Invalid Invitation', goHome: 'Go to Home', title: "You're Invited!", subtitle: 'Join your team on SPEECK.AI', invitedAs: 'has invited you to join their team as a', email: 'Email', expires: 'Expires', createJoin: 'Create Account & Join Team', haveSignIn: 'Already have an account? Sign In', benefits: "By joining, you'll get access to team practice sessions and progress tracking" },
 };
 
 const es: Dict = {
@@ -138,6 +144,9 @@ const es: Dict = {
       'Prueba distintos niveles de dificultad para retarte',
     ],
   },
+  auth: { loginSubtitle: 'Accede a tu panel de entrenamiento', signupSubtitle: 'Empieza tu entrenamiento de inglés', orEmail: 'o usa tu email', orCreate: 'o crea una cuenta', namePlaceholder: 'Tu nombre', companyPlaceholder: 'Nombre de la empresa', createAccount: 'crear cuenta', haveAccount: 'ya tengo cuenta' },
+  session: { fallbackTitle: 'Sesión de práctica', level: 'nivel', tokens: 'tokens', jargon: 'jerga técnica', terms: 'términos', skills: { pronunciation: 'Pronunciación', fluency: 'Fluidez', vocabulary: 'Vocabulario', grammar: 'Gramática', interaction: 'Interacción', comprehension: 'Comprensión' } },
+  invite: { loading: 'Cargando invitación...', invalid: 'Invitación no válida', goHome: 'Ir al inicio', title: '¡Estás invitado!', subtitle: 'Únete a tu equipo en SPEECK.AI', invitedAs: 'te ha invitado a unirte a su equipo como', email: 'Email', expires: 'Vence', createJoin: 'Crear cuenta y unirse', haveSignIn: '¿Ya tienes cuenta? Inicia sesión', benefits: 'Al unirte, tendrás acceso a las prácticas del equipo y al seguimiento del progreso' },
 };
 
 const fr: Dict = {
@@ -192,6 +201,9 @@ const fr: Dict = {
       'Essayez différents niveaux de difficulté pour vous challenger',
     ],
   },
+  auth: { loginSubtitle: 'Accédez à votre tableau de bord', signupSubtitle: "Commencez votre entraînement en anglais", orEmail: "ou utilisez l'email", orCreate: 'ou créez un compte', namePlaceholder: 'Votre nom', companyPlaceholder: "Nom de l'entreprise", createAccount: 'créer un compte', haveAccount: "j'ai déjà un compte" },
+  session: { fallbackTitle: 'Session de pratique', level: 'niveau', tokens: 'tokens', jargon: 'jargon technique', terms: 'termes', skills: { pronunciation: 'Prononciation', fluency: 'Aisance', vocabulary: 'Vocabulaire', grammar: 'Grammaire', interaction: 'Interaction', comprehension: 'Compréhension' } },
+  invite: { loading: "Chargement de l'invitation...", invalid: 'Invitation invalide', goHome: "Aller à l'accueil", title: 'Vous êtes invité !', subtitle: 'Rejoignez votre équipe sur SPEECK.AI', invitedAs: "vous a invité à rejoindre son équipe en tant que", email: 'Email', expires: 'Expire le', createJoin: 'Créer un compte et rejoindre', haveSignIn: 'Vous avez déjà un compte ? Connectez-vous', benefits: "En rejoignant, vous accédez aux sessions de pratique de l'équipe et au suivi de la progression" },
 };
 
 const pt: Dict = {
@@ -246,6 +258,9 @@ const pt: Dict = {
       'Experimente diferentes níveis de dificuldade para se desafiar',
     ],
   },
+  auth: { loginSubtitle: 'Acesse seu painel de treino', signupSubtitle: 'Comece seu treino de inglês', orEmail: 'ou use seu email', orCreate: 'ou crie uma conta', namePlaceholder: 'Seu nome', companyPlaceholder: 'Nome da empresa', createAccount: 'criar conta', haveAccount: 'já tenho conta' },
+  session: { fallbackTitle: 'Sessão de prática', level: 'nível', tokens: 'tokens', jargon: 'jargão técnico', terms: 'termos', skills: { pronunciation: 'Pronúncia', fluency: 'Fluência', vocabulary: 'Vocabulário', grammar: 'Gramática', interaction: 'Interação', comprehension: 'Compreensão' } },
+  invite: { loading: 'Carregando convite...', invalid: 'Convite inválido', goHome: 'Ir para o início', title: 'Você foi convidado!', subtitle: 'Junte-se à sua equipe no SPEECK.AI', invitedAs: 'convidou você para entrar na equipe como', email: 'Email', expires: 'Expira em', createJoin: 'Criar conta e entrar', haveSignIn: 'Já tem uma conta? Entrar', benefits: 'Ao entrar, você terá acesso às práticas da equipe e ao acompanhamento do progresso' },
 };
 
 const DICTS: Record<UiLocale, Dict> = { en, es, fr, pt };
@@ -299,15 +314,17 @@ export function useUi(): Ctx {
 export function LanguageSwitcher({ className = '' }: { className?: string }) {
   const { locale, setLocale } = useUi();
   return (
-    <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 border border-gray-200/40 ${className}`}>
-      <span className="text-xs" aria-hidden>🌐</span>
+    <div className={`inline-flex gap-1 items-center ${className}`}>
+      <span className="font-mono text-xs text-gray-400 mr-1">lang:</span>
       {UI_LOCALES.map((l) => (
         <button
           key={l}
           onClick={() => setLocale(l)}
           aria-pressed={locale === l}
-          className={`px-1.5 py-0.5 rounded-full font-mono text-[11px] transition-all ${
-            locale === l ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'opacity-70 hover:opacity-100'
+          className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${
+            locale === l
+              ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white'
+              : 'bg-white/60 text-gray-600 hover:bg-white'
           }`}
         >
           {UI_LOCALE_LABELS[l]}

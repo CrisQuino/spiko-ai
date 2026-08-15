@@ -6,9 +6,11 @@ import { supabase } from '@/lib/supabase';
 import { config } from '@/lib/config';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
 export default function SignupPage() {
   const router = useRouter();
+  const { d } = useUi();
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -75,6 +77,7 @@ export default function SignupPage() {
       </div>
 
       <div className="max-w-md w-full">
+        <div className="flex justify-end mb-4"><LanguageSwitcher className="text-gray-600" /></div>
         <Link href="/" className="inline-flex items-center text-cyan-600 mb-8 hover:text-emerald-600 transition-colors font-mono text-sm">
           <span className="mr-2">←</span> cd ../home
         </Link>
@@ -95,7 +98,7 @@ export default function SignupPage() {
               auth.signup()
             </h1>
             <p className="text-gray-600 font-mono text-sm">
-              <span className="text-gray-400">// </span>Start your English training
+              <span className="text-gray-400">// </span>{d.auth.signupSubtitle}
             </p>
           </div>
 
@@ -143,7 +146,7 @@ export default function SignupPage() {
               <div className="w-full border-t border-gray-300"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500 font-mono">// or create account</span>
+              <span className="px-4 bg-white text-gray-500 font-mono">// {d.auth.orCreate}</span>
             </div>
           </div>
 
@@ -154,7 +157,7 @@ export default function SignupPage() {
                 type="text"
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                placeholder="Your Name"
+                placeholder={d.auth.namePlaceholder}
                 required
                 className="w-full pl-10 pr-4 py-3 glass rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 border border-gray-200/50"
               />
@@ -178,7 +181,7 @@ export default function SignupPage() {
                 type="text"
                 value={formData.company}
                 onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                placeholder="Company Name"
+                placeholder={d.auth.companyPlaceholder}
                 className="w-full pl-10 pr-4 py-3 glass rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 border border-gray-200/50"
               />
             </div>
@@ -221,7 +224,7 @@ export default function SignupPage() {
 
           <div className="mt-6 text-center space-y-2">
             <Link href="/auth/login" className="block text-sm font-mono text-cyan-600 hover:text-emerald-600 transition-colors">
-              auth.login() <span className="text-gray-400">// already have account</span>
+              auth.login() <span className="text-gray-400">// {d.auth.haveAccount}</span>
             </Link>
           </div>
         </motion.div>

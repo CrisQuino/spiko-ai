@@ -6,9 +6,11 @@ import { supabase } from '@/lib/supabase';
 import { config } from '@/lib/config';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { d } = useUi();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -73,6 +75,7 @@ export default function LoginPage() {
       </div>
 
       <div className="max-w-md w-full">
+        <div className="flex justify-end mb-4"><LanguageSwitcher className="text-gray-600" /></div>
         <Link href="/" className="inline-flex items-center text-cyan-600 mb-8 hover:text-emerald-600 transition-colors font-mono text-sm">
           <span className="mr-2">←</span> cd ../home
         </Link>
@@ -95,7 +98,7 @@ export default function LoginPage() {
               auth.login()
             </h1>
             <p className="text-gray-600 font-mono text-sm">
-              <span className="text-gray-400">// </span>Access your training dashboard
+              <span className="text-gray-400">// </span>{d.auth.loginSubtitle}
             </p>
           </div>
 
@@ -145,7 +148,7 @@ export default function LoginPage() {
               <div className="w-full border-t border-gray-300"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500 font-mono">// or use email</span>
+              <span className="px-4 bg-white text-gray-500 font-mono">// {d.auth.orEmail}</span>
             </div>
           </div>
 
@@ -206,7 +209,7 @@ export default function LoginPage() {
           {/* Footer Links */}
           <div className="mt-6 text-center space-y-2">
             <Link href="/auth/signup" className="block text-sm font-mono text-cyan-600 hover:text-emerald-600 transition-colors">
-              auth.signup() <span className="text-gray-400">// create account</span>
+              auth.signup() <span className="text-gray-400">// {d.auth.createAccount}</span>
             </Link>
             <Link href="/" className="block text-sm font-mono text-gray-500 hover:text-gray-700 transition-colors">
               <span className="text-gray-400">←</span> cd ../home

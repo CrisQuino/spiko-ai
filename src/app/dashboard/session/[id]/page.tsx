@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase, getLessonDetail, type LessonDetail } from '@/lib/supabase';
+import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
 const SKILLS: Array<{ key: string; label: string }> = [
   { key: 'pronunciation', label: 'Pronunciation' },
@@ -24,6 +25,7 @@ function scoreColor(score: number | null): string {
 
 export default function SessionDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const { d } = useUi();
   const [loading, setLoading] = useState(true);
   const [lesson, setLesson] = useState<LessonDetail | null>(null);
 
@@ -72,10 +74,10 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
       <header className="bg-gray-900 border-b border-gray-800">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-white font-mono font-bold text-lg">{lesson.scenario_title || 'Practice session'}</h1>
+            <h1 className="text-white font-mono font-bold text-lg">{lesson.scenario_title || d.session.fallbackTitle}</h1>
             <p className="text-emerald-400 text-xs font-mono">// session.review</p>
           </div>
-          <Link href="/dashboard" className="text-gray-400 hover:text-white font-mono text-sm">← dashboard()</Link>
+          <div className="flex items-center gap-3"><LanguageSwitcher className="text-gray-300 border-gray-700" /><Link href="/dashboard" className="text-gray-400 hover:text-white font-mono text-sm">← dashboard()</Link></div>
         </div>
       </header>
 
@@ -86,10 +88,10 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
           <span>⏱ {mins}:{secs.toString().padStart(2, '0')}</span>
           {lesson.cefr_overall && (
             <span className="flex items-center gap-2">
-              level: <span className="text-2xl font-bold gradient-text">{lesson.cefr_overall}</span>
+              {d.session.level}: <span className="text-2xl font-bold gradient-text">{lesson.cefr_overall}</span>
             </span>
           )}
-          <span>🔤 {(lesson.total_tokens || 0).toLocaleString()} tokens</span>
+          <span>🔤 {(lesson.total_tokens || 0).toLocaleString()} {d.session.tokens}</span>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8">
@@ -103,7 +105,7 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
                 return (
                   <div key={s.key}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-mono text-sm text-gray-700">{s.label}</span>
+                      <span className="font-mono text-sm text-gray-700">{d.session.skills[s.key as keyof typeof d.session.skills] || s.label}</span>
                       <span className="font-mono text-sm">
                         <span className="text-gray-400">{level || '—'}</span>{' '}
                         <span className="font-bold">{score != null ? `${score}/100` : ''}</span>
@@ -117,9 +119,9 @@ export default function SessionDetailPage({ params }: { params: { id: string } }
               })}
               {lesson.technical_accuracy_level && (
                 <div className="pt-2 border-t border-gray-200/50 font-mono text-sm text-gray-600">
-                  technical jargon: <span className="font-bold text-gray-800">{lesson.technical_accuracy_level}</span>
+                  {d.session.jargon}: <span className="font-bold text-gray-800">{lesson.technical_accuracy_level}</span>
                   {lesson.technical_terms_used && lesson.technical_terms_used.length > 0 && (
-                    <span className="text-gray-400"> · {lesson.technical_terms_used.length} terms</span>
+                    <span className="text-gray-400"> · {lesson.technical_terms_used.length} {d.session.terms}</span>
                   )}
                 </div>
               )}
