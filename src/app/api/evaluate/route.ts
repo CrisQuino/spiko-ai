@@ -46,6 +46,30 @@ function coerceSkill(v: any, fallbackDesc = '') {
   };
 }
 
+/**
+ * Conservative fallback when the LLM examiner cannot be reached/parsed after
+ * retries. We DELIBERATELY do not reuse the English-only heuristic here: it
+ * scores by sentence length and would invent an inflated level (e.g. "C1") for
+ * a language it cannot actually assess. Instead we return a clearly-labelled
+ * "not available" result so the UI never shows a fabricated grade.
+ */
+function unavailableAssessment(languageName: string): CEFRAssessment {
+  const note = `We couldn't complete the detailed ${languageName} assessment this time (the examiner was temporarily unavailable). Please run the practice again to get an accurate CEFR rating — this score is a placeholder, not a real evaluation.`;
+  const skill = { level: 'A1' as const, score: 0, description: 'Not evaluated — examiner unavailable.' };
+  return {
+    overall: { level: 'A1', score: 0, description: 'Evaluation unavailable — please try again.' },
+    pronunciation: { ...skill },
+    fluency: { ...skill },
+    vocabulary: { ...skill },
+    grammar: { ...skill },
+    interaction: { ...skill },
+    comprehension: { ...skill },
+    technicalJargon: { level: 'Basic', termsUsed: [], accuracy: 0 },
+    quickFeedback: ['Evaluation could not be completed — please try the practice again.'],
+    finalFeedback: note,
+  };
+}
+
 function coerceAssessment(raw: any): CEFRAssessment {
   return {
     overall: coerceSkill(raw?.overall),
@@ -83,35 +107,41 @@ export async function POST(request: Request) {
 
     const transcript = userMessages.map((m, i) => `${i + 1}. ${m}`).join('\n');
     const wordCount = userMessages.join(' ').trim().split(/\s+/).filter(Boolean).length;
+    const userContent = `Learner transcript (their ${lang.promptName} turns only). Sample size: ${userMessages.length} turn(s), ~${wordCount} words — apply the evidence-sufficiency rule accordingly.\n\n${transcript}`;
 
-    const result = await chatComplete({
-      provider: resolveProvider(),
-      system: buildRubricPrompt(lang.promptName, level),
-      messages: [
-        {
-          role: 'user',
-          content: `Learner transcript (their ${lang.promptName} turns only). Sample size: ${userMessages.length} turn(s), ~${wordCount} words — apply the evidence-sufficiency rule accordingly.\n\n${transcript}`,
-        },
-      ],
-      maxTokens: 900,
-    });
+    // Try the LLM examiner a few times before giving up: a single malformed
+    // JSON reply (which used to drop us to the misleading heuristic) is usually
+    // transient, so re-asking almost always yields a proper in-language rubric.
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const result = await chatComplete({
+          provider: resolveProvider(),
+          system: buildRubricPrompt(lang.promptName, level),
+          messages: [{ role: 'user', content: userContent }],
+          maxTokens: 900,
+        });
 
-    // Strip any markdown fences and parse the JSON object.
-    let text = result.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
-    if (start !== -1 && end !== -1) text = text.slice(start, end + 1);
+        // Strip any markdown fences and parse the outermost JSON object.
+        let text = result.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        if (start !== -1 && end !== -1) text = text.slice(start, end + 1);
 
-    const parsed = JSON.parse(text);
-    const assessment = coerceAssessment(parsed);
+        const assessment = coerceAssessment(JSON.parse(text));
+        return NextResponse.json({ assessment, source: 'llm', tokenUsage: result.usage });
+      } catch (err) {
+        lastErr = err;
+        console.error(`/api/evaluate attempt ${attempt + 1} failed:`, err);
+      }
+    }
 
-    return NextResponse.json({ assessment, source: 'llm', tokenUsage: result.usage });
+    // Every attempt failed → conservative, clearly-labelled placeholder.
+    // Never invent an inflated level from the English-only heuristic.
+    console.error('/api/evaluate exhausted retries, returning unavailable:', lastErr);
+    return NextResponse.json({ assessment: unavailableAssessment(lang.promptName), source: 'unavailable' });
   } catch (error) {
-    console.error('Error in /api/evaluate, falling back to heuristic:', error);
-    // Never fail the user's result screen — fall back to the heuristic evaluator.
-    return NextResponse.json({
-      assessment: evaluateCEFR(userMessages, 0, 'production_incident', 0),
-      source: 'heuristic-fallback',
-    });
+    console.error('Error in /api/evaluate:', error);
+    return NextResponse.json({ assessment: unavailableAssessment(lang.promptName), source: 'unavailable' });
   }
 }
