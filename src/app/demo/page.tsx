@@ -363,7 +363,8 @@ export default function DemoPage() {
               tokenUsage: totalTokensRef.current,
               clarificationCount,
               assessment, // Include the client assessment
-              scenarioTitle: scenarioTitleRef.current
+              scenarioTitle: scenarioTitleRef.current,
+              targetLevel: levelRef.current // selected CEFR target ('' = auto)
             })
           })
             .then(response => {

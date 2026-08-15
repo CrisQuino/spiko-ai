@@ -111,6 +111,11 @@ jobs:
         run: npx playwright test --project=chromium
         env:
           CI: true
+          # The Playwright webServer boots the app (`npm run dev`); without these
+          # the Supabase client throws "supabaseUrl is required" at startup.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Upload Playwright report
         if: always()

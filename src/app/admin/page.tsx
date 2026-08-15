@@ -364,8 +364,33 @@ export default function AdminDashboard() {
                   </td>
                   <td className="py-3 px-4">
                     {lesson.cefr_overall && (
-                      <span className="tech-badge-cyan text-xs">
-                        {lesson.cefr_overall}
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="tech-badge-cyan text-xs">
+                          {lesson.cefr_overall}
+                        </span>
+                        {(() => {
+                          const order = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+                          const t = order.indexOf(lesson.target_level);
+                          const o = order.indexOf(lesson.cefr_overall);
+                          if (t < 0 || o < 0) return null;
+                          if (o === t)
+                            return (
+                              <span className="text-blue-500" title={`Target ${lesson.target_level} — met`} aria-label="meets target">
+                                ●
+                              </span>
+                            );
+                          if (o > t)
+                            return (
+                              <span className="text-green-600" title={`Target ${lesson.target_level} — above target`} aria-label="above target">
+                                ▲
+                              </span>
+                            );
+                          return (
+                            <span className="text-red-600" title={`Target ${lesson.target_level} — below target`} aria-label="below target">
+                              ▼
+                            </span>
+                          );
+                        })()}
                       </span>
                     )}
                   </td>

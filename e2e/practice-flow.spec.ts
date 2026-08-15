@@ -51,7 +51,7 @@ async function testUserToken(): Promise<string> {
   cachedToken = (await res.json()).access_token;
   return cachedToken!;
 }
-async function finalizeSession(messages: Array<{ role: string; content: string }>, language: string, scenarioTitle: string) {
+async function finalizeSession(messages: Array<{ role: string; content: string }>, language: string, scenarioTitle: string, targetLevel?: string) {
   const token = await testUserToken();
   const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
   const started = await (await fetch(`${BASE}/api/lesson/start`, { method: 'POST', headers: auth, body: JSON.stringify({ scenarioType: scenarioTitle, demoMode: false }) })).json();
@@ -68,7 +68,7 @@ async function finalizeSession(messages: Array<{ role: string; content: string }
   await fetch(`${BASE}/api/lesson/complete`, {
     method: 'POST',
     headers: auth,
-    body: JSON.stringify({ lessonId: started.lessonId, messages, durationSeconds: 180, tokenUsage: { input, output }, assessment: evalRes.assessment, scenarioTitle }),
+    body: JSON.stringify({ lessonId: started.lessonId, messages, durationSeconds: 180, tokenUsage: { input, output }, assessment: evalRes.assessment, scenarioTitle, targetLevel }),
   });
   return started.lessonId as string;
 }
@@ -242,7 +242,7 @@ test.describe('Practice flow — JD/level semantic checks', () => {
       console.log(`\n===== ${m.label} =====\n${transcript}\n`);
 
       // Persist a reviewable session (transcript + real evaluation).
-      const sessionId = await finalizeSession(full, m.code, `${m.jd} — ${m.level} (${m.code.toUpperCase()})`);
+      const sessionId = await finalizeSession(full, m.code, `${m.jd} — ${m.level} (${m.code.toUpperCase()})`, m.level);
       console.log(`REVIEW ${m.label}: /dashboard/session/${sessionId}`);
 
       // Structural sanity always runs (free/deterministic).
