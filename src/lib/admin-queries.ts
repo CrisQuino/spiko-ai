@@ -48,6 +48,38 @@ export interface CEFRByLanguage {
   count: number;
 }
 
+export interface AdminLesson {
+  lesson_id: string;
+  user_id: string;
+  email: string | null;
+  completed_at: string;
+  language: string; // 'en' | 'fr' | 'pt' | 'unknown'
+  total_cost: number;
+  total_tokens: number;
+  cefr_overall: string | null;
+  target_level: string | null;
+  duration_seconds: number | null;
+  scenario_title: string | null;
+}
+
+/**
+ * Fetch every completed lesson (admin-only, bypasses RLS via the postgres-owned
+ * admin_lessons_detail view). The admin dashboard computes ALL panels/KPIs from
+ * this single dataset so one language filter + date range drives everything.
+ */
+export async function getAdminLessons(): Promise<AdminLesson[]> {
+  const { data, error } = await supabase
+    .from('admin_lessons_detail')
+    .select('*')
+    .order('completed_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching admin lessons:', error);
+    return [];
+  }
+  return (data || []) as AdminLesson[];
+}
+
 export interface KPIMetrics {
   totalCostMonth: number;
   activeUsers: number;
