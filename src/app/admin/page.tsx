@@ -9,6 +9,13 @@ import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 type Lang = 'global' | 'en' | 'fr' | 'pt';
 type Granularity = 'day' | 'month';
 
+// Client-side super-admin allowlist for the dashboard gate. This is UX only —
+// the real authorization is server-side (the /api/admin route + RLS). Defaults
+// to the owner; an optional public env can add a test admin locally.
+const SUPER_ADMIN_EMAILS = (process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAILS || 'dash.crs@gmail.com')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+const isSuperAdmin = (email?: string | null) => !!email && SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
+
 const pad = (n: number) => String(n).padStart(2, '0');
 const dayKey = (s: string) => {
   const d = new Date(s);
@@ -49,7 +56,7 @@ export default function AdminDashboard() {
         return;
       }
       setUserEmail(user.email || '');
-      const adminStatus = user.email === 'dash.crs@gmail.com';
+      const adminStatus = isSuperAdmin(user.email);
       setIsAdmin(adminStatus);
       if (!adminStatus) {
         setLoading(false);
@@ -457,6 +464,9 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Super-admin: companies + platform settings management */}
+      <SuperAdminPanel />
+
       {/* Recent Lessons Table */}
       <div className="glass rounded-2xl p-6 border border-gray-200/50">
         <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
@@ -547,6 +557,352 @@ function LangSelector({ value, onChange }: { value: Lang; onChange: (l: Lang) =>
           {opt === 'global' ? 'Global' : opt.toUpperCase()}
         </button>
       ))}
+    </div>
+  );
+}
+
+// ── Super-admin management (companies + platform settings) ──────────────────
+type Company = {
+  id: string; name: string; slug: string; status: string;
+  allowed_email_domain: string | null; max_users: number | null;
+  daily_practice_limit: number | null; monthly_practice_limit: number | null;
+  max_jds_per_user: number | null; members: number; pending_invites: number;
+};
+type Member = { id: string; email: string | null; full_name: string | null; role: string; status: string };
+type Pending = { id: string; email: string; role: string; status: string; expires_at: string };
+type Settings = { free_monthly_sessions: number; free_max_jds: number; premium_max_jds: number };
+
+const num = (v: string) => (v === '' ? null : Number(v));
+const lim = (v: number | null) => (v == null ? '∞' : String(v));
+
+function SuperAdminPanel() {
+  const [token, setToken] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [sDraft, setSDraft] = useState({ free_monthly_sessions: '', free_max_jds: '', premium_max_jds: '' });
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Record<string, { members: Member[]; pending: Pending[] }>>({});
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ name: '', allowed_email_domain: '', max_users: '5', daily_practice_limit: '', monthly_practice_limit: '', max_jds_per_user: '' });
+
+  const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
+
+  const api = async (action: string, params: Record<string, unknown> = {}) => {
+    const r = await fetch('/api/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action, ...params }),
+    });
+    return { status: r.status, body: await r.json().catch(() => ({} as any)) };
+  };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setToken(data.session?.access_token ?? null));
+  }, []);
+
+  const loadAll = async () => {
+    const [s, c] = await Promise.all([api('get_settings'), api('list_companies')]);
+    if (s.body?.settings) {
+      setSettings(s.body.settings);
+      setSDraft({
+        free_monthly_sessions: String(s.body.settings.free_monthly_sessions ?? ''),
+        free_max_jds: String(s.body.settings.free_max_jds ?? ''),
+        premium_max_jds: String(s.body.settings.premium_max_jds ?? ''),
+      });
+    }
+    if (c.body?.companies) setCompanies(c.body.companies);
+  };
+  useEffect(() => { if (token) loadAll(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [token]);
+
+  const saveSettings = async () => {
+    setBusy(true);
+    const r = await api('update_settings', { patch: { ...sDraft } });
+    setBusy(false);
+    if (r.status === 200) { setSettings(r.body.settings); flash('✓ settings saved'); } else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+
+  const createCompany = async () => {
+    if (!form.name.trim()) return flash('✕ name required');
+    setBusy(true);
+    const r = await api('create_company', {
+      name: form.name.trim(),
+      allowed_email_domain: form.allowed_email_domain.trim() || null,
+      max_users: num(form.max_users),
+      daily_practice_limit: num(form.daily_practice_limit),
+      monthly_practice_limit: num(form.monthly_practice_limit),
+      max_jds_per_user: num(form.max_jds_per_user),
+    });
+    setBusy(false);
+    if (r.status === 200) {
+      setForm({ name: '', allowed_email_domain: '', max_users: '5', daily_practice_limit: '', monthly_practice_limit: '', max_jds_per_user: '' });
+      setShowCreate(false);
+      flash('✓ company created');
+      loadAll();
+    } else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+
+  const toggleDetail = async (id: string) => {
+    if (openId === id) { setOpenId(null); return; }
+    setOpenId(id);
+    if (!detail[id]) {
+      const r = await api('list_members', { company_id: id });
+      setDetail((d) => ({ ...d, [id]: { members: r.body?.members || [], pending: r.body?.pending || [] } }));
+    }
+  };
+  const refreshDetail = async (id: string) => {
+    const r = await api('list_members', { company_id: id });
+    setDetail((d) => ({ ...d, [id]: { members: r.body?.members || [], pending: r.body?.pending || [] } }));
+  };
+
+  const patchCompany = async (id: string, patch: Record<string, unknown>) => {
+    setBusy(true);
+    const r = await api('update_company', { id, patch });
+    setBusy(false);
+    if (r.status === 200) { flash('✓ updated'); loadAll(); } else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+  const suspendCompany = async (c: Company) => {
+    const r = await api('suspend_company', { id: c.id, suspended: c.status !== 'suspended' });
+    if (r.status === 200) { flash(c.status !== 'suspended' ? '✓ suspended' : '✓ reactivated'); loadAll(); }
+  };
+  const deleteCompany = async (c: Company) => {
+    if (!window.confirm(`Delete "${c.name}"? Members are detached and its JDs/invitations removed. This cannot be undone.`)) return;
+    const r = await api('delete_company', { id: c.id });
+    if (r.status === 200) { flash('✓ company deleted'); setOpenId(null); loadAll(); } else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+  const inviteManager = async (id: string, email: string, reset: () => void) => {
+    if (!email.trim()) return flash('✕ email required');
+    const r = await api('invite_manager', { company_id: id, email: email.trim() });
+    if (r.status === 200) { flash(`✓ manager invited: ${r.body.invitation.email}`); reset(); refreshDetail(id); loadAll(); } else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+  const uploadJd = async (id: string, title: string, content: string, reset: () => void) => {
+    if (!title.trim() || !content.trim()) return flash('✕ title and content required');
+    const r = await api('upload_company_jd', { company_id: id, title: title.trim(), content: content.trim() });
+    if (r.status === 200) { flash('✓ company JD uploaded'); reset(); } else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+  const revokeUser = async (id: string, m: Member) => {
+    const r = await api('revoke_user', { user_id: m.id, revoked: m.status !== 'revoked' });
+    if (r.status === 200) { flash(m.status !== 'revoked' ? '✓ user revoked' : '✓ user reinstated'); refreshDetail(id); }
+  };
+
+  return (
+    <div className="glass rounded-2xl p-6 border border-gray-200/50">
+      <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+        <h2 className="text-xl font-bold font-mono">
+          <span className="text-gray-400">// </span>super_admin()
+        </h2>
+        {msg && <span className={`font-mono text-xs px-2.5 py-1 rounded-md ${msg.startsWith('✓') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{msg}</span>}
+      </div>
+
+      {/* Platform settings */}
+      <div className="mb-8">
+        <h3 className="font-mono text-sm text-gray-500 mb-3">platform_settings()</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {([
+            ['free_monthly_sessions', 'Free sessions / month'],
+            ['free_max_jds', 'Free max JDs'],
+            ['premium_max_jds', 'Premium max JDs'],
+          ] as const).map(([k, label]) => (
+            <label key={k} className="block">
+              <span className="font-mono text-xs text-gray-500">{label}</span>
+              <input
+                type="number" min={0}
+                value={sDraft[k]}
+                onChange={(e) => setSDraft((s) => ({ ...s, [k]: e.target.value }))}
+                className="mt-1 w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm"
+              />
+            </label>
+          ))}
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <button onClick={saveSettings} disabled={busy} className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-mono text-sm disabled:opacity-50 hover:shadow-lg transition-all">
+            save_settings()
+          </button>
+          {settings && (
+            <span className="font-mono text-xs text-gray-400">
+              live: {settings.free_monthly_sessions}/mo · {settings.free_max_jds} free JDs · {settings.premium_max_jds} premium JDs
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Companies */}
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <h3 className="font-mono text-sm text-gray-500">companies() <span className="text-gray-400">[{companies.length}]</span></h3>
+        <button onClick={() => setShowCreate((v) => !v)} className="px-3 py-1.5 rounded-md bg-gray-800 text-white hover:bg-gray-700 font-mono text-xs transition-all">
+          {showCreate ? '✕ cancel' : '+ new_company()'}
+        </button>
+      </div>
+
+      {showCreate && (
+        <div className="mb-5 p-4 rounded-xl bg-white/60 border border-gray-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <Field label="Name *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="Acme Corp" />
+          <Field label="Allowed email domain" value={form.allowed_email_domain} onChange={(v) => setForm({ ...form, allowed_email_domain: v })} placeholder="acme.com" />
+          <Field label="Max users" value={form.max_users} onChange={(v) => setForm({ ...form, max_users: v })} type="number" />
+          <Field label="Daily limit (blank = ∞)" value={form.daily_practice_limit} onChange={(v) => setForm({ ...form, daily_practice_limit: v })} type="number" />
+          <Field label="Monthly limit (blank = ∞)" value={form.monthly_practice_limit} onChange={(v) => setForm({ ...form, monthly_practice_limit: v })} type="number" />
+          <Field label="Max JDs / user (blank = ∞)" value={form.max_jds_per_user} onChange={(v) => setForm({ ...form, max_jds_per_user: v })} type="number" />
+          <div className="sm:col-span-2 lg:col-span-3">
+            <button onClick={createCompany} disabled={busy} className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-mono text-sm disabled:opacity-50 hover:shadow-lg transition-all">
+              create_company()
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {companies.map((c) => (
+          <div key={c.id} className="rounded-xl bg-white/50 border border-gray-200">
+            <button onClick={() => toggleDetail(c.id)} className="w-full flex items-center justify-between p-4 text-left hover:bg-white/70 transition-all">
+              <div className="min-w-0">
+                <p className="font-mono text-sm text-gray-800 truncate">
+                  {c.name}
+                  <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded ${c.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{c.status}</span>
+                </p>
+                <p className="font-mono text-xs text-gray-500">
+                  {c.members}/{lim(c.max_users)} users · {c.pending_invites} pending · {c.allowed_email_domain || 'any domain'} · {lim(c.daily_practice_limit)}/day · {lim(c.monthly_practice_limit)}/mo · {lim(c.max_jds_per_user)} JDs/user
+                </p>
+              </div>
+              <span className="font-mono text-xs text-gray-400 shrink-0 pl-2">{openId === c.id ? '▾' : '▸'}</span>
+            </button>
+
+            {openId === c.id && (
+              <CompanyDetail
+                c={c}
+                detail={detail[c.id]}
+                busy={busy}
+                onPatch={patchCompany}
+                onSuspend={suspendCompany}
+                onDelete={deleteCompany}
+                onInvite={inviteManager}
+                onUploadJd={uploadJd}
+                onRevoke={revokeUser}
+              />
+            )}
+          </div>
+        ))}
+        {companies.length === 0 && <p className="text-center text-gray-500 font-mono text-sm py-8">// no_companies_yet</p>}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+  return (
+    <label className="block">
+      <span className="font-mono text-xs text-gray-500">{label}</span>
+      <input type={type} min={type === 'number' ? 0 : undefined} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm" />
+    </label>
+  );
+}
+
+function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite, onUploadJd, onRevoke }: {
+  c: Company; detail?: { members: Member[]; pending: Pending[] }; busy: boolean;
+  onPatch: (id: string, patch: Record<string, unknown>) => void;
+  onSuspend: (c: Company) => void; onDelete: (c: Company) => void;
+  onInvite: (id: string, email: string, reset: () => void) => void;
+  onUploadJd: (id: string, title: string, content: string, reset: () => void) => void;
+  onRevoke: (id: string, m: Member) => void;
+}) {
+  const [limits, setLimits] = useState({
+    max_users: String(c.max_users ?? ''),
+    daily_practice_limit: c.daily_practice_limit == null ? '' : String(c.daily_practice_limit),
+    monthly_practice_limit: c.monthly_practice_limit == null ? '' : String(c.monthly_practice_limit),
+    max_jds_per_user: c.max_jds_per_user == null ? '' : String(c.max_jds_per_user),
+    allowed_email_domain: c.allowed_email_domain ?? '',
+  });
+  const [invEmail, setInvEmail] = useState('');
+  const [jdTitle, setJdTitle] = useState('');
+  const [jdContent, setJdContent] = useState('');
+
+  return (
+    <div className="border-t border-gray-200 p-4 space-y-5">
+      {/* Edit limits */}
+      <div>
+        <h4 className="font-mono text-xs text-gray-500 mb-2">edit_limits()</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <Field label="Max users" type="number" value={limits.max_users} onChange={(v) => setLimits({ ...limits, max_users: v })} />
+          <Field label="Daily (∞ blank)" type="number" value={limits.daily_practice_limit} onChange={(v) => setLimits({ ...limits, daily_practice_limit: v })} />
+          <Field label="Monthly (∞ blank)" type="number" value={limits.monthly_practice_limit} onChange={(v) => setLimits({ ...limits, monthly_practice_limit: v })} />
+          <Field label="JDs/user (∞ blank)" type="number" value={limits.max_jds_per_user} onChange={(v) => setLimits({ ...limits, max_jds_per_user: v })} />
+          <Field label="Email domain" value={limits.allowed_email_domain} onChange={(v) => setLimits({ ...limits, allowed_email_domain: v })} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={() => onPatch(c.id, {
+              max_users: num(limits.max_users),
+              daily_practice_limit: num(limits.daily_practice_limit),
+              monthly_practice_limit: num(limits.monthly_practice_limit),
+              max_jds_per_user: num(limits.max_jds_per_user),
+              allowed_email_domain: limits.allowed_email_domain.trim() || null,
+            })}
+            disabled={busy}
+            className="px-3 py-1.5 rounded-md bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-mono text-xs disabled:opacity-50"
+          >
+            save_limits()
+          </button>
+          <button onClick={() => onSuspend(c)} className="px-3 py-1.5 rounded-md bg-amber-500 text-white hover:bg-amber-600 font-mono text-xs">
+            {c.status === 'suspended' ? 'reactivate()' : 'suspend()'}
+          </button>
+          <button onClick={() => onDelete(c)} className="px-3 py-1.5 rounded-md bg-red-600 text-white hover:bg-red-700 font-mono text-xs">
+            delete_company()
+          </button>
+        </div>
+      </div>
+
+      {/* Invite manager */}
+      <div>
+        <h4 className="font-mono text-xs text-gray-500 mb-2">invite_manager()</h4>
+        <div className="flex flex-wrap gap-2">
+          <input value={invEmail} onChange={(e) => setInvEmail(e.target.value)} placeholder="manager@company.com" className="flex-1 min-w-[200px] bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm" />
+          <button onClick={() => onInvite(c.id, invEmail, () => setInvEmail(''))} className="px-3 py-2 rounded-md bg-gray-800 text-white hover:bg-gray-700 font-mono text-xs">
+            send_invite()
+          </button>
+        </div>
+      </div>
+
+      {/* Upload company JD */}
+      <div>
+        <h4 className="font-mono text-xs text-gray-500 mb-2">upload_company_jd() <span className="text-gray-400">— visible to the whole team</span></h4>
+        <div className="space-y-2">
+          <input value={jdTitle} onChange={(e) => setJdTitle(e.target.value)} placeholder="JD title" className="w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm" />
+          <textarea value={jdContent} onChange={(e) => setJdContent(e.target.value)} placeholder="Job description content…" rows={3} className="w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm" />
+          <button onClick={() => onUploadJd(c.id, jdTitle, jdContent, () => { setJdTitle(''); setJdContent(''); })} className="px-3 py-1.5 rounded-md bg-gray-800 text-white hover:bg-gray-700 font-mono text-xs">
+            upload_jd()
+          </button>
+        </div>
+      </div>
+
+      {/* Members + pending */}
+      <div>
+        <h4 className="font-mono text-xs text-gray-500 mb-2">members() {detail ? `[${detail.members.length}]` : ''}</h4>
+        {!detail ? (
+          <p className="font-mono text-xs text-gray-400">// loading…</p>
+        ) : (
+          <div className="space-y-1">
+            {detail.members.map((m) => (
+              <div key={m.id} className="flex items-center justify-between px-3 py-2 rounded-md bg-white/60 font-mono text-xs">
+                <span className="truncate">
+                  {m.email || `${m.id.slice(0, 8)}…`}
+                  <span className="ml-2 text-gray-400">{m.role}</span>
+                  {m.status === 'revoked' && <span className="ml-2 text-red-600">revoked</span>}
+                </span>
+                <button onClick={() => onRevoke(c.id, m)} className={`px-2 py-1 rounded ${m.status === 'revoked' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}>
+                  {m.status === 'revoked' ? 'reinstate' : 'revoke'}
+                </button>
+              </div>
+            ))}
+            {detail.members.length === 0 && <p className="font-mono text-xs text-gray-400">// no_members</p>}
+            {detail.pending.map((p) => (
+              <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-md bg-amber-50 font-mono text-xs">
+                <span className="truncate">{p.email} <span className="ml-2 text-amber-600">{p.role} · pending</span></span>
+                <span className="text-gray-400">expires {new Date(p.expires_at).toLocaleDateString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
