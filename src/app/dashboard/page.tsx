@@ -122,6 +122,9 @@ export default function DashboardPage() {
               <Link href="/demo" className="text-gray-400 hover:text-white transition-colors font-mono text-sm">
                 practice()
               </Link>
+              <Link href="/dashboard/settings" className="text-gray-400 hover:text-white transition-colors font-mono text-sm">
+                settings()
+              </Link>
               <button
                 onClick={async () => {
                   await supabase.auth.signOut();
