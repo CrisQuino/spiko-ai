@@ -40,7 +40,9 @@ export default function SignupPage() {
       if (error) throw error;
 
       if (data.user) {
-        router.push('/dashboard');
+        // If they arrived from an invite, finish acceptance on the invite page.
+        const invite = new URLSearchParams(window.location.search).get('invite');
+        router.push(invite ? `/invite/${invite}` : '/dashboard');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to sign up');
