@@ -15,7 +15,6 @@ const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const REF = env.SUPABASE_PROJECT_REF;
 const SBP = env.SUPABASE_ACCESS_TOKEN;
-const LIMIT = Number(env.FREE_MONTHLY_SESSIONS || 3);
 const BASE = 'http://localhost:3000';
 const EMAIL = 'limit-test@spiko-demo.test';
 const PASSWORD = 'Limit-test-Passw0rd!';
@@ -24,6 +23,10 @@ async function main() {
   const keys = await (await fetch(`https://api.supabase.com/v1/projects/${REF}/api-keys`, { headers: { Authorization: `Bearer ${SBP}` } })).json();
   const service = keys.find((k) => k.name === 'service_role').api_key;
   const admin = (p, o = {}) => fetch(`${SUPABASE_URL}${p}`, { ...o, headers: { apikey: service, Authorization: `Bearer ${service}`, 'Content-Type': 'application/json', ...(o.headers || {}) } });
+
+  // The gate reads the limit from platform_settings (super-admin editable), so
+  // the test asserts against that live value — not an env var.
+  const LIMIT = (await (await admin('/rest/v1/platform_settings?select=free_monthly_sessions&id=eq.1')).json())[0].free_monthly_sessions;
 
   // create or find the user
   let userId;
