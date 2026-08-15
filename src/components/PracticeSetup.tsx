@@ -7,6 +7,7 @@ import { LANGUAGE_LIST, DEFAULT_LANGUAGE, type LanguageCode } from '@/lib/langua
 import {
   getJobDescriptions,
   createJobDescription,
+  getJdQuota,
   type JobDescription,
 } from '@/lib/supabase';
 
@@ -62,6 +63,12 @@ export default function PracticeSetup({ isOpen, onClose, companyId }: Props) {
       return;
     }
     setSaving(true);
+    const quota = await getJdQuota();
+    if (quota.used >= quota.cap) {
+      setSaving(false);
+      setError(`You've reached your job description limit (${quota.cap}). Delete one before adding another.`);
+      return;
+    }
     const created = await createJobDescription({
       title: newTitle,
       content: newContent,

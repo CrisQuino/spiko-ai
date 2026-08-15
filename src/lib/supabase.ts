@@ -271,6 +271,31 @@ export async function getJobDescriptions(): Promise<JobDescription[]> {
   return data || [];
 }
 
+// JD upload caps: corporate uses the company's max_jds_per_user; individuals
+// use a free/premium cap. Configurable via env (NEXT_PUBLIC_FREE_MAX_JDS).
+const FREE_MAX_JDS = Number(process.env.NEXT_PUBLIC_FREE_MAX_JDS || 3);
+const PREMIUM_MAX_JDS = 25;
+
+/** How many JDs the current user has vs their cap (for the upload limit). */
+export async function getJdQuota(): Promise<{ used: number; cap: number }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { used: 0, cap: 0 };
+  const { count } = await supabase
+    .from('job_descriptions')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id);
+  const used = count || 0;
+  const { data: profile } = await supabase.from('profiles').select('plan, company_id').eq('id', user.id).single();
+  let cap = FREE_MAX_JDS;
+  if (profile?.company_id) {
+    const { data: company } = await supabase.from('companies').select('max_jds_per_user').eq('id', profile.company_id).single();
+    cap = (company?.max_jds_per_user ?? null) == null ? Number.MAX_SAFE_INTEGER : company!.max_jds_per_user;
+  } else if (profile?.plan === 'premium') {
+    cap = PREMIUM_MAX_JDS;
+  }
+  return { used, cap };
+}
+
 export async function createJobDescription(input: {
   title: string;
   content: string;
