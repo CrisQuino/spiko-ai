@@ -68,8 +68,7 @@ export default function Home() {
             </div>
           </div>
           
-          <div className="hidden md:flex items-center space-x-6">
-            <LanguageSwitcher className="text-gray-700" />
+          <div className="hidden md:flex items-center space-x-8">
             <a href="#features" className="text-gray-700 hover:text-cyan-600 transition-colors font-mono text-sm">features()</a>
             <a href="#how-it-works" className="text-gray-700 hover:text-cyan-600 transition-colors font-mono text-sm">workflow()</a>
             <a href="#pricing" className="text-gray-700 hover:text-cyan-600 transition-colors font-mono text-sm">pricing()</a>
@@ -87,8 +86,7 @@ export default function Home() {
             </Link>
           </div>
 
-          <div className="md:hidden flex items-center space-x-2">
-            <LanguageSwitcher className="text-gray-700" />
+          <div className="md:hidden flex items-center space-x-4">
             <button
               onClick={handleLogin}
               className="text-sm text-gray-700 hover:text-cyan-600 font-mono font-medium"
@@ -120,6 +118,7 @@ export default function Home() {
         </div>
 
         <div className="container mx-auto max-w-6xl">
+          <div className="flex justify-end mb-4"><LanguageSwitcher className="text-gray-700" /></div>
           <motion.div
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -224,6 +223,7 @@ export default function Home() {
       {/* Features Section */}
       <section id="features" className="py-20 px-6">
         <div className="container mx-auto max-w-6xl">
+          <div className="flex justify-end mb-4"><LanguageSwitcher className="text-gray-700" /></div>
           <motion.div
             initial={{ y: 30, opacity: 0 }}
             whileInView={{ y: 0, opacity: 1 }}
@@ -298,6 +298,7 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="py-20 px-6">
         <div className="container mx-auto max-w-6xl">
+          <div className="flex justify-end mb-4"><LanguageSwitcher className="text-gray-700" /></div>
           <motion.div
             initial={{ y: 30, opacity: 0 }}
             whileInView={{ y: 0, opacity: 1 }}

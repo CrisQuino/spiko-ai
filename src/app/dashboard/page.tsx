@@ -115,8 +115,7 @@ export default function DashboardPage() {
               </div>
             </Link>
             
-            <nav className="flex items-center space-x-4">
-              <LanguageSwitcher className="text-gray-300 border-gray-700" />
+            <nav className="flex items-center space-x-6">
               <Link href="/" className="text-gray-400 hover:text-white transition-colors font-mono text-sm">
                 home()
               </Link>
@@ -162,6 +161,7 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
+        <div className="flex justify-end mb-4"><LanguageSwitcher /></div>
         {/* Welcome */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}

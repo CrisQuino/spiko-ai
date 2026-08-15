@@ -15,9 +15,11 @@ import {
 import { getInviteUrl } from '@/lib/config';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
 export default function TeamDashboardPage() {
   const router = useRouter();
+  const { d } = useUi();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
@@ -175,7 +177,7 @@ export default function TeamDashboardPage() {
                 👥
               </div>
               <div>
-                <h1 className="text-white font-mono font-bold text-xl">TEAM DASHBOARD</h1>
+                <h1 className="text-white font-mono font-bold text-xl">{d.team.title}</h1>
                 <p className="text-blue-400 text-xs font-mono">// {company?.name || 'manage_your_team'}</p>
               </div>
             </Link>
@@ -203,34 +205,35 @@ export default function TeamDashboardPage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
+        <div className="flex justify-end mb-4"><LanguageSwitcher /></div>
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <StatCard
             icon="👥"
             title="total_members"
             value={stats?.totalEmployees || 0}
-            subtitle="Team size"
+            subtitle={d.team.teamSize}
             delay={0}
           />
           <StatCard
             icon="⭐"
             title="avg_performance"
             value={`${stats?.averageScore || 0}/100`}
-            subtitle="Team average"
+            subtitle={d.team.teamAvg}
             delay={0.1}
           />
           <StatCard
             icon="📚"
             title="sessions_month"
             value={stats?.totalConversations || stats?.totalConversations || 0}
-            subtitle="This month"
+            subtitle={d.team.thisMonth}
             delay={0.2}
           />
           <StatCard
             icon="📧"
             title="pending_invites"
             value={pendingInvites.length}
-            subtitle="Awaiting response"
+            subtitle={d.team.awaiting}
             delay={0.3}
           />
         </div>
@@ -283,7 +286,7 @@ export default function TeamDashboardPage() {
                           </div>
                           <div>
                             <p className="font-mono text-sm font-bold text-gray-800">
-                              {employee.full_name || 'Unknown'}
+                              {employee.full_name || d.team.unknown}
                             </p>
                             <p className="font-mono text-xs text-gray-500">
                               {employee.email}
@@ -295,7 +298,7 @@ export default function TeamDashboardPage() {
                             {employee.role || 'employee'}
                           </div>
                           <div className="text-sm font-mono text-gray-600">
-                            <span className="text-emerald-600">{0 || 0}</span> sessions
+                            <span className="text-emerald-600">{0 || 0}</span> {d.team.sessions}
                           </div>
                         </div>
                       </div>
@@ -325,7 +328,7 @@ export default function TeamDashboardPage() {
                             {invite.email}
                           </p>
                           <p className="font-mono text-xs text-gray-500 mt-1">
-                            Invited {new Date(invite.created_at).toLocaleDateString()}
+                            {d.team.invited} {new Date(invite.created_at).toLocaleDateString()}
                           </p>
                         </div>
                         <div className="tech-badge-orange">
@@ -375,9 +378,9 @@ export default function TeamDashboardPage() {
                 <span className="text-gray-400">// </span>manager_tips
               </h3>
               <div className="space-y-4">
-                <Tip number={1} text="Encourage daily 10-15 min practice sessions" />
-                <Tip number={2} text="Monitor team progress and provide feedback" />
-                <Tip number={3} text="Celebrate improvements and milestones" />
+                <Tip number={1} text={d.team.tips[0]} />
+                <Tip number={2} text={d.team.tips[1]} />
+                <Tip number={3} text={d.team.tips[2]} />
               </div>
             </motion.div>
           </div>
@@ -426,7 +429,7 @@ export default function TeamDashboardPage() {
                       type="email"
                       value={inviteEmail}
                       onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="colleague@company.com"
+                      placeholder={d.team.emailPlaceholder}
                       className="w-full pl-10 pr-4 py-3 glass rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 border border-gray-200/50"
                     />
                   </div>

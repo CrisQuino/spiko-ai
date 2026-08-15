@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { getAdminLessons, type AdminLesson } from '@/lib/admin-queries';
+import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
 type Lang = 'global' | 'en' | 'fr' | 'pt';
 type Granularity = 'day' | 'month';
@@ -20,6 +21,7 @@ const monthKey = (s: string) => {
 
 export default function AdminDashboard() {
   const [lessons, setLessons] = useState<AdminLesson[]>([]);
+  const { d } = useUi();
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userEmail, setUserEmail] = useState('');
@@ -167,12 +169,12 @@ export default function AdminDashboard() {
           <div className="text-6xl mb-4">🚫</div>
           <h2 className="text-2xl font-bold font-mono mb-2 text-gray-900">access.denied()</h2>
           <p className="text-gray-600 font-mono text-sm mb-4">
-            <span className="text-red-600">// Admin access required</span>
+            <span className="text-red-600">// {d.admin.adminRequired}</span>
           </p>
           <div className="bg-gray-100 rounded-lg p-4 mb-6">
-            <p className="text-xs font-mono text-gray-500">Your email:</p>
+            <p className="text-xs font-mono text-gray-500">{d.admin.yourEmail}:</p>
             <p className="font-mono text-sm text-gray-900 break-all">{userEmail || 'Not logged in'}</p>
-            <p className="text-xs font-mono text-gray-500 mt-2">Required:</p>
+            <p className="text-xs font-mono text-gray-500 mt-2">{d.admin.required}:</p>
             <p className="font-mono text-sm text-emerald-600">dash.crs@gmail.com</p>
           </div>
           <div className="space-y-2">
@@ -180,7 +182,7 @@ export default function AdminDashboard() {
               onClick={() => window.location.reload()}
               className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-mono transition-all"
             >
-              🔄 Refresh Page
+              🔄 {d.admin.refresh}
             </button>
             <a
               href="/dashboard"
@@ -200,17 +202,17 @@ export default function AdminDashboard() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold font-mono gradient-text mb-2">admin.dashboard()</h1>
-          <p className="text-gray-600 font-mono text-sm">// Infrastructure metrics and cost tracking</p>
+          <p className="text-gray-600 font-mono text-sm">// {d.admin.subtitle}</p>
         </div>
-        <LangSelector value={lang} onChange={setLang} />
+        <div className="flex items-center gap-3 flex-wrap"><LanguageSwitcher /><LangSelector value={lang} onChange={setLang} /></div>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KPICard title="Total Cost (Month)" value={`$${kpis.cost.toFixed(2)}`} subtitle={`${kpis.lessons} lessons`} icon="💰" trend={kpis.cost > 0 ? 'up' : 'neutral'} />
-        <KPICard title="Active Users" value={kpis.users.toString()} subtitle="This month" icon="👥" trend="up" />
-        <KPICard title="Lessons Today" value={kpis.today.toString()} subtitle={new Date().toLocaleDateString()} icon="📚" trend="neutral" />
-        <KPICard title="Avg Cost/Lesson" value={`$${kpis.avg.toFixed(4)}`} subtitle={`${(kpis.tokens / 1000).toFixed(0)}k tokens`} icon="📊" trend="down" />
+        <KPICard title={d.admin.totalCost} value={`$${kpis.cost.toFixed(2)}`} subtitle={`${kpis.lessons} ${d.admin.lessons}`} icon="💰" trend={kpis.cost > 0 ? 'up' : 'neutral'} />
+        <KPICard title={d.admin.activeUsers} value={kpis.users.toString()} subtitle={d.admin.thisMonth} icon="👥" trend="up" />
+        <KPICard title={d.admin.lessonsToday} value={kpis.today.toString()} subtitle={new Date().toLocaleDateString()} icon="📚" trend="neutral" />
+        <KPICard title={d.admin.avgCost} value={`$${kpis.avg.toFixed(4)}`} subtitle={`${(kpis.tokens / 1000).toFixed(0)}k ${d.admin.tokens}`} icon="📊" trend="down" />
       </div>
 
       {/* API AI Costs */}
@@ -229,7 +231,7 @@ export default function AdminDashboard() {
                     granularity === g ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'
                   }`}
                 >
-                  {g === 'day' ? 'Days' : 'Months'}
+                  {g === 'day' ? d.admin.days : d.admin.months}
                 </button>
               ))}
             </div>
@@ -242,7 +244,7 @@ export default function AdminDashboard() {
         </div>
 
         <div className="font-mono text-sm text-gray-500 mb-3">
-          Range total: <span className="font-bold text-emerald-600">${rangeTotal.toFixed(4)}</span> · {series.length} {granularity === 'day' ? 'day(s)' : 'month(s)'}
+          {d.admin.rangeTotal}: <span className="font-bold text-emerald-600">${rangeTotal.toFixed(4)}</span> · {series.length} {granularity === 'day' ? 'day(s)' : 'month(s)'}
         </div>
 
         <div className="flex gap-3">
@@ -299,9 +301,9 @@ export default function AdminDashboard() {
             <span className="text-gray-400">// </span>activity()
           </h2>
           <div className="flex items-center gap-4 font-mono text-xs">
-            <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>lessons (left)</span>
-            <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-500"></span>active users (right)</span>
-            <span className="text-gray-400">({granularity === 'day' ? 'per day' : 'per month'})</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>{d.admin.lessonsLeft}</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-500"></span>{d.admin.usersRight}</span>
+            <span className="text-gray-400">({granularity === 'day' ? d.admin.perDay : d.admin.perMonth})</span>
           </div>
         </div>
 
@@ -381,7 +383,7 @@ export default function AdminDashboard() {
                 onClick={() => setSelectedUser(null)}
                 className="px-2.5 py-1 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition-all font-mono text-xs"
               >
-                ✕ show all
+                ✕ {d.admin.showAll}
               </button>
             )}
           </div>
@@ -394,7 +396,7 @@ export default function AdminDashboard() {
                 className={`w-full flex items-center justify-between p-3 rounded-lg text-left transition-all ${
                   selectedUser?.id === u.user_id ? 'bg-emerald-50 ring-2 ring-emerald-400' : 'bg-white/50 hover:bg-white'
                 }`}
-                title="Click to filter recent lessons by this user"
+                title={d.admin.clickFilter}
               >
                 <div className="flex items-center space-x-3 min-w-0">
                   <div className="w-8 h-8 shrink-0 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-mono text-sm font-bold">
@@ -426,7 +428,7 @@ export default function AdminDashboard() {
             </h2>
             {selectedUser && (
               <span className="font-mono text-xs px-2 py-1 rounded-md bg-emerald-100 text-emerald-700">
-                filtered: {selectedUser.email || `${selectedUser.id.slice(0, 8)}…`}
+                {d.admin.filtered}: {selectedUser.email || `${selectedUser.id.slice(0, 8)}…`}
               </span>
             )}
           </div>
@@ -471,14 +473,14 @@ export default function AdminDashboard() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-300">
-                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Date</th>
-                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">User</th>
-                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Lang</th>
-                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Scenario</th>
-                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Duration</th>
+                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">{d.admin.date}</th>
+                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">{d.admin.user}</th>
+                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">{d.admin.lang}</th>
+                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">{d.admin.scenario}</th>
+                <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">{d.admin.duration}</th>
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">CEFR</th>
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Tokens</th>
-                <th className="text-right py-3 px-4 font-mono text-sm text-gray-600">Cost</th>
+                <th className="text-right py-3 px-4 font-mono text-sm text-gray-600">{d.admin.cost}</th>
               </tr>
             </thead>
             <tbody>
