@@ -6,65 +6,56 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
+type InviteInfo = {
+  email: string;
+  role: string;
+  expires_at: string;
+  status: string;
+  company_name: string | null;
+  company_suspended?: boolean;
+  valid: boolean;
+  reason?: string;
+};
+
+const REASON_MSG: Record<string, string> = {
+  invalid: 'Invalid or expired invitation link',
+  expired: 'This invitation has expired',
+  used: 'This invitation has already been used',
+  email_mismatch: 'This invitation is for a different email address',
+  company_suspended: 'This company is currently suspended',
+  company_full: 'This team has reached its member limit',
+};
+
 export default function InvitePage({ params }: { params: { token: string } }) {
   const router = useRouter();
   const { d } = useUi();
   const [loading, setLoading] = useState(true);
-  const [invitation, setInvitation] = useState<any>(null);
-  const [company, setCompany] = useState<any>(null);
+  const [accepting, setAccepting] = useState(false);
+  const [info, setInfo] = useState<InviteInfo | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     loadInvitation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.token]);
 
   const loadInvitation = async () => {
     try {
-      // Get invitation
-      const { data: inviteData, error: inviteError } = await supabase
-        .from('invitations')
-        .select(`
-          *,
-          companies (
-            id,
-            name,
-            plan
-          )
-        `)
-        .eq('invite_token', params.token)
-        .single();
-
-      if (inviteError || !inviteData) {
-        setError('Invalid or expired invitation link');
+      const res = await fetch(`/api/invite/accept?token=${encodeURIComponent(params.token)}`);
+      const data: InviteInfo = await res.json();
+      if (!data.valid) {
+        setError(REASON_MSG[data.reason || 'invalid'] || REASON_MSG.invalid);
         setLoading(false);
         return;
       }
+      setInfo(data);
 
-      // Check if expired
-      if (new Date(inviteData.expires_at) < new Date()) {
-        setError('This invitation has expired');
-        setLoading(false);
-        return;
+      // If already logged in, accept immediately.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        await acceptInvitation(session.access_token);
       }
-
-      // Check if already accepted
-      if (inviteData.status !== 'pending') {
-        setError('This invitation has already been used');
-        setLoading(false);
-        return;
-      }
-
-      setInvitation(inviteData);
-      setCompany(inviteData.companies);
-
-      // Check if user is already logged in
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        // User is logged in - accept invitation automatically
-        await acceptInvitation(user.id, inviteData);
-      }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error loading invitation:', err);
       setError('Failed to load invitation');
     } finally {
@@ -72,39 +63,29 @@ export default function InvitePage({ params }: { params: { token: string } }) {
     }
   };
 
-  const acceptInvitation = async (userId: string, invite: any) => {
+  const acceptInvitation = async (accessToken: string) => {
+    setAccepting(true);
     try {
-      // Update user profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          company_id: invite.company_id,
-          role: invite.role,
-        })
-        .eq('id', userId);
-
-      if (profileError) throw profileError;
-
-      // Mark invitation as accepted
-      const { error: inviteError } = await supabase
-        .from('invitations')
-        .update({
-          status: 'accepted',
-          accepted_at: new Date().toISOString(),
-        })
-        .eq('id', invite.id);
-
-      if (inviteError) throw inviteError;
-
-      // Redirect to dashboard
+      const res = await fetch('/api/invite/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ token: params.token }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(REASON_MSG[data.error] || 'Failed to accept invitation');
+        setAccepting(false);
+        return;
+      }
       router.push('/dashboard?welcome=true');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error accepting invitation:', err);
       setError('Failed to accept invitation');
+      setAccepting(false);
     }
   };
 
-  if (loading) {
+  if (loading || accepting) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary-50 to-accent-50 flex items-center justify-center">
         <div className="text-center">
@@ -137,7 +118,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
     );
   }
 
-  // Show invitation details - user needs to signup
+  // Not logged in — offer signup/login, carrying the invite token through.
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-accent-50 flex items-center justify-center p-4">
       <div className="glass rounded-3xl p-8 w-full max-w-md">
@@ -156,12 +137,12 @@ export default function InvitePage({ params }: { params: { token: string } }) {
 
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
           <p className="text-sm text-gray-600 mb-3">
-            <strong>{company?.name}</strong> {d.invite.invitedAs}{' '}
-            <strong className="capitalize">{invitation?.role}</strong>
+            <strong>{info?.company_name}</strong> {d.invite.invitedAs}{' '}
+            <strong className="capitalize">{info?.role}</strong>
           </p>
           <div className="text-xs text-gray-500 space-y-1">
-            <p>• {d.invite.email}: {invitation?.email}</p>
-            <p>• {d.invite.expires}: {new Date(invitation?.expires_at).toLocaleDateString()}</p>
+            <p>• {d.invite.email}: {info?.email}</p>
+            <p>• {d.invite.expires}: {info?.expires_at ? new Date(info.expires_at).toLocaleDateString() : '—'}</p>
           </div>
         </div>
 
@@ -172,7 +153,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
           >
             {d.invite.createJoin}
           </Link>
-          
+
           <Link
             href={`/auth/login?invite=${params.token}`}
             className="block w-full px-6 py-3 border-2 border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-all text-center"

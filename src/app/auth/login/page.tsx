@@ -28,9 +28,11 @@ export default function LoginPage() {
       });
 
       if (error) throw error;
-      
+
       console.log('✅ Login successful, redirecting...');
-      router.push('/dashboard');
+      // If they arrived from an invite, finish acceptance on the invite page.
+      const invite = new URLSearchParams(window.location.search).get('invite');
+      router.push(invite ? `/invite/${invite}` : '/dashboard');
     } catch (err: any) {
       setError(err.message || 'Failed to login');
     } finally {
