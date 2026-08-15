@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+// Free individuals get this many practice sessions per calendar month.
+// Configurable so limits can be tuned (or lowered to test) without a deploy.
+const FREE_MONTHLY_SESSIONS = Number(process.env.FREE_MONTHLY_SESSIONS || 10);
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -61,6 +65,51 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('✅ [USER FOUND] ID:', user.id, 'Email:', user.email);
+
+    // ---- Phase 1: status + usage-limit gate ----
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('status, plan, company_id')
+      .eq('id', user.id)
+      .single();
+
+    if (profile?.status === 'revoked') {
+      return NextResponse.json({ error: 'Your access has been revoked. Contact your administrator.', code: 'revoked' }, { status: 403 });
+    }
+
+    const now = new Date();
+    const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+    const countSince = async (since: string) => {
+      const { count } = await supabase
+        .from('lesson_costs')
+        .select('lesson_id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('started_at', since);
+      return count || 0;
+    };
+
+    if (profile?.company_id) {
+      const { data: company } = await supabase
+        .from('companies')
+        .select('status, daily_practice_limit, monthly_practice_limit')
+        .eq('id', profile.company_id)
+        .single();
+      if (company?.status === 'suspended') {
+        return NextResponse.json({ error: 'Your company account is suspended.', code: 'company_suspended' }, { status: 403 });
+      }
+      if (company?.daily_practice_limit != null && (await countSince(startOfDay)) >= company.daily_practice_limit) {
+        return NextResponse.json({ error: `Daily practice limit reached (${company.daily_practice_limit}/day).`, code: 'daily_limit' }, { status: 403 });
+      }
+      if (company?.monthly_practice_limit != null && (await countSince(startOfMonth)) >= company.monthly_practice_limit) {
+        return NextResponse.json({ error: `Monthly practice limit reached (${company.monthly_practice_limit}/month).`, code: 'monthly_limit' }, { status: 403 });
+      }
+    } else if (profile?.plan !== 'premium') {
+      if ((await countSince(startOfMonth)) >= FREE_MONTHLY_SESSIONS) {
+        return NextResponse.json({ error: `You've used your ${FREE_MONTHLY_SESSIONS} free sessions this month. Upgrade to Premium for unlimited practice.`, code: 'free_limit' }, { status: 403 });
+      }
+    }
+    // ---- end gate ----
 
     // Generate lesson ID
     const lessonId = crypto.randomUUID();
