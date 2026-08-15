@@ -7,19 +7,20 @@ import {
   getKPIMetrics,
   getDailyCosts,
   getTopUsers,
-  getCEFRDistribution,
+  getCEFRByLanguage,
   getRecentLessons,
   type KPIMetrics,
   type DailyCost,
   type TopUser,
-  type CEFRDistribution,
+  type CEFRByLanguage,
 } from '@/lib/admin-queries';
 
 export default function AdminDashboard() {
   const [kpis, setKpis] = useState<KPIMetrics | null>(null);
   const [dailyCosts, setDailyCosts] = useState<DailyCost[]>([]);
   const [topUsers, setTopUsers] = useState<TopUser[]>([]);
-  const [cefrDist, setCefrDist] = useState<CEFRDistribution[]>([]);
+  const [cefrByLang, setCefrByLang] = useState<CEFRByLanguage[]>([]);
+  const [cefrLangFilter, setCefrLangFilter] = useState<'global' | 'en' | 'fr' | 'pt'>('global');
   const [recentLessons, setRecentLessons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -72,14 +73,14 @@ export default function AdminDashboard() {
         getKPIMetrics(),
         getDailyCosts(30),
         getTopUsers(200),
-        getCEFRDistribution(),
+        getCEFRByLanguage(),
         getRecentLessons(20),
       ]);
 
       setKpis(kpiData);
       setDailyCosts(dailyData);
       setTopUsers(usersData);
-      setCefrDist(cefrData);
+      setCefrByLang(cefrData);
       setRecentLessons(lessonsData);
     } catch (error) {
       console.error('Error loading dashboard:', error);
@@ -286,40 +287,71 @@ export default function AdminDashboard() {
 
         {/* CEFR Distribution */}
         <div className="glass rounded-2xl p-6 border border-gray-200/50">
-          <h2 className="text-xl font-bold font-mono mb-4">
-            <span className="text-gray-400">// </span>cefr_distribution()
-          </h2>
-          
-          <div className="space-y-3">
-            {['C2', 'C1', 'B2', 'B1', 'A2', 'A1'].map(level => {
-              const data = cefrDist.find(d => d.level === level);
-              const percentage = data?.percentage || 0;
-              const count = data?.count || 0;
-              
-              return (
-                <div key={level}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-mono text-sm font-bold text-gray-700">{level}</span>
-                    <span className="font-mono text-sm text-gray-600">
-                      {count} ({percentage.toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div 
-                      className="h-3 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500"
-                      style={{ width: `${percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              );
-            })}
-            
-            {cefrDist.length === 0 && (
-              <p className="text-center text-gray-500 font-mono text-sm py-8">
-                // no_assessments_yet
-              </p>
-            )}
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+            <h2 className="text-xl font-bold font-mono">
+              <span className="text-gray-400">// </span>cefr_distribution()
+            </h2>
+            <div className="flex gap-1">
+              {(['global', 'en', 'fr', 'pt'] as const).map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => setCefrLangFilter(opt)}
+                  className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${
+                    cefrLangFilter === opt
+                      ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white'
+                      : 'bg-white/60 text-gray-600 hover:bg-white'
+                  }`}
+                >
+                  {opt === 'global' ? 'Global' : opt.toUpperCase()}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {(() => {
+            const rows =
+              cefrLangFilter === 'global'
+                ? cefrByLang
+                : cefrByLang.filter((r) => r.language === cefrLangFilter);
+            const counts: Record<string, number> = {};
+            let total = 0;
+            rows.forEach((r) => {
+              counts[r.level] = (counts[r.level] || 0) + r.count;
+              total += r.count;
+            });
+
+            return (
+              <div className="space-y-3">
+                {['C2', 'C1', 'B2', 'B1', 'A2', 'A1'].map((level) => {
+                  const count = counts[level] || 0;
+                  const percentage = total > 0 ? (count / total) * 100 : 0;
+
+                  return (
+                    <div key={level}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-mono text-sm font-bold text-gray-700">{level}</span>
+                        <span className="font-mono text-sm text-gray-600">
+                          {count} ({percentage.toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div
+                          className="h-3 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500"
+                          style={{ width: `${percentage}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {total === 0 && (
+                  <p className="text-center text-gray-500 font-mono text-sm py-8">
+                    // no_assessments_yet{cefrLangFilter !== 'global' ? ` for ${cefrLangFilter.toUpperCase()}` : ''}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 

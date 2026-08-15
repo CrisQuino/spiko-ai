@@ -42,6 +42,12 @@ export interface CEFRDistribution {
   percentage: number;
 }
 
+export interface CEFRByLanguage {
+  language: string; // 'en' | 'fr' | 'pt' | 'unknown'
+  level: string;
+  count: number;
+}
+
 export interface KPIMetrics {
   totalCostMonth: number;
   activeUsers: number;
@@ -114,6 +120,23 @@ export async function getCEFRDistribution(): Promise<CEFRDistribution[]> {
 
   if (error) {
     console.error('Error fetching CEFR distribution:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+/**
+ * Fetch CEFR distribution split by practice language (for the Global/EN/FR/PT
+ * selector). The admin page aggregates these rows client-side.
+ */
+export async function getCEFRByLanguage(): Promise<CEFRByLanguage[]> {
+  const { data, error } = await supabase
+    .from('admin_cefr_by_language')
+    .select('*');
+
+  if (error) {
+    console.error('Error fetching CEFR by language:', error);
     return [];
   }
 
