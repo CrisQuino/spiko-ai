@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Free individuals get this many practice sessions per calendar month.
-// Configurable so limits can be tuned (or lowered to test) without a deploy.
-const FREE_MONTHLY_SESSIONS = Number(process.env.FREE_MONTHLY_SESSIONS || 10);
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -105,8 +101,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `Monthly practice limit reached (${company.monthly_practice_limit}/month).`, code: 'monthly_limit' }, { status: 403 });
       }
     } else if (profile?.plan !== 'premium') {
-      if ((await countSince(startOfMonth)) >= FREE_MONTHLY_SESSIONS) {
-        return NextResponse.json({ error: `You've used your ${FREE_MONTHLY_SESSIONS} free sessions this month. Upgrade to Premium for unlimited practice.`, code: 'free_limit' }, { status: 403 });
+      // Read the current free limit from super-admin settings (live; no redeploy).
+      const { data: settings } = await supabase.from('platform_settings').select('free_monthly_sessions').eq('id', 1).single();
+      const freeLimit = settings?.free_monthly_sessions ?? 10;
+      if ((await countSince(startOfMonth)) >= freeLimit) {
+        return NextResponse.json({ error: `You've used your ${freeLimit} free sessions this month. Upgrade to Premium for unlimited practice.`, code: 'free_limit' }, { status: 403 });
       }
     }
     // ---- end gate ----
