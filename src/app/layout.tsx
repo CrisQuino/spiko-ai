@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { UiI18nProvider, LanguageSwitcher } from "@/lib/ui-i18n";
+import { UiI18nProvider } from "@/lib/ui-i18n";
 
 export const metadata: Metadata = {
   title: "SPEECK.AI - Code Your Communication",
@@ -26,7 +26,6 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <UiI18nProvider>
-          <LanguageSwitcher />
           {children}
         </UiI18nProvider>
       </body>

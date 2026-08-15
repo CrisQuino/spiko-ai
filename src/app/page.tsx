@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { useUi } from '@/lib/ui-i18n';
+import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
 // Prices + which plan is highlighted (not translated).
 const PLAN_META = [
@@ -68,7 +68,8 @@ export default function Home() {
             </div>
           </div>
           
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden md:flex items-center space-x-6">
+            <LanguageSwitcher className="text-gray-700" />
             <a href="#features" className="text-gray-700 hover:text-cyan-600 transition-colors font-mono text-sm">features()</a>
             <a href="#how-it-works" className="text-gray-700 hover:text-cyan-600 transition-colors font-mono text-sm">workflow()</a>
             <a href="#pricing" className="text-gray-700 hover:text-cyan-600 transition-colors font-mono text-sm">pricing()</a>
@@ -86,8 +87,9 @@ export default function Home() {
             </Link>
           </div>
 
-          <div className="md:hidden flex items-center space-x-4">
-            <button 
+          <div className="md:hidden flex items-center space-x-2">
+            <LanguageSwitcher className="text-gray-700" />
+            <button
               onClick={handleLogin}
               className="text-sm text-gray-700 hover:text-cyan-600 font-mono font-medium"
             >

@@ -24,6 +24,10 @@ type Dict = {
   steps: { titlePre: string; titleHi: string; items: Step[] };
   pricing: { titlePre: string; titleHi: string; popular: string; perMo: string; plans: Plan[] };
   footer: { tagline: string };
+  dashboard: {
+    welcome: string; subtitle: string; completed: string; overall: string;
+    speakingTime: string; recently: string; noActivity: string; mostRecent: string; tips: string[];
+  };
 };
 
 const FEATURE_ICONS = ['🎙', '🔥', '⚡', '🎯', '📊', '🤖'];
@@ -70,6 +74,16 @@ const en: Dict = {
     ],
   },
   footer: { tagline: 'Built for engineers, by engineers' },
+  dashboard: {
+    welcome: 'Welcome back', subtitle: 'Track your progress and improve your technical English',
+    completed: 'completed', overall: 'Overall performance', speakingTime: 'Total speaking time',
+    recently: 'Recently', noActivity: 'No activity', mostRecent: 'Most recent session',
+    tips: [
+      'Practice daily for 10-15 minutes for best results',
+      'Focus on technical vocabulary specific to your role',
+      'Try different difficulty levels to challenge yourself',
+    ],
+  },
 };
 
 const es: Dict = {
@@ -114,6 +128,16 @@ const es: Dict = {
     ],
   },
   footer: { tagline: 'Hecho por ingenieros, para ingenieros' },
+  dashboard: {
+    welcome: 'Bienvenido de nuevo', subtitle: 'Sigue tu progreso y mejora tu inglés técnico',
+    completed: 'completadas', overall: 'Rendimiento general', speakingTime: 'Tiempo total hablando',
+    recently: 'Reciente', noActivity: 'Sin actividad', mostRecent: 'Sesión más reciente',
+    tips: [
+      'Practica a diario 10-15 minutos para mejores resultados',
+      'Enfócate en el vocabulario técnico de tu rol',
+      'Prueba distintos niveles de dificultad para retarte',
+    ],
+  },
 };
 
 const fr: Dict = {
@@ -158,6 +182,16 @@ const fr: Dict = {
     ],
   },
   footer: { tagline: 'Conçu par des ingénieurs, pour des ingénieurs' },
+  dashboard: {
+    welcome: 'Bon retour', subtitle: 'Suivez votre progression et améliorez votre anglais technique',
+    completed: 'terminées', overall: 'Performance globale', speakingTime: 'Temps de parole total',
+    recently: 'Récemment', noActivity: 'Aucune activité', mostRecent: 'Session la plus récente',
+    tips: [
+      'Pratiquez 10 à 15 minutes par jour pour de meilleurs résultats',
+      'Concentrez-vous sur le vocabulaire technique de votre rôle',
+      'Essayez différents niveaux de difficulté pour vous challenger',
+    ],
+  },
 };
 
 const pt: Dict = {
@@ -202,6 +236,16 @@ const pt: Dict = {
     ],
   },
   footer: { tagline: 'Feito por engenheiros, para engenheiros' },
+  dashboard: {
+    welcome: 'Bem-vindo de volta', subtitle: 'Acompanhe seu progresso e melhore seu inglês técnico',
+    completed: 'concluídas', overall: 'Desempenho geral', speakingTime: 'Tempo total falando',
+    recently: 'Recente', noActivity: 'Sem atividade', mostRecent: 'Sessão mais recente',
+    tips: [
+      'Pratique 10-15 minutos por dia para melhores resultados',
+      'Foque no vocabulário técnico específico da sua função',
+      'Experimente diferentes níveis de dificuldade para se desafiar',
+    ],
+  },
 };
 
 const DICTS: Record<UiLocale, Dict> = { en, es, fr, pt };
@@ -247,11 +291,15 @@ export function useUi(): Ctx {
   return ctx;
 }
 
-/** Compact language selector rendered fixed in the header on every page. */
-export function LanguageSwitcher() {
+/**
+ * Compact, inline language selector. Placed inside each page's own nav/header
+ * (not fixed/floating) so it stays consistent and never overlaps content or
+ * breaks on mobile. `className` lets callers tweak spacing per header.
+ */
+export function LanguageSwitcher({ className = '' }: { className?: string }) {
   const { locale, setLocale } = useUi();
   return (
-    <div className="fixed top-3 right-3 z-[100] flex items-center gap-1 glass rounded-full px-2 py-1 border border-gray-200/60 shadow-sm">
+    <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 border border-gray-200/40 ${className}`}>
       <span className="text-xs" aria-hidden>🌐</span>
       {UI_LOCALES.map((l) => (
         <button
@@ -259,7 +307,7 @@ export function LanguageSwitcher() {
           onClick={() => setLocale(l)}
           aria-pressed={locale === l}
           className={`px-1.5 py-0.5 rounded-full font-mono text-[11px] transition-all ${
-            locale === l ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'text-gray-600 hover:text-gray-900'
+            locale === l ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'opacity-70 hover:opacity-100'
           }`}
         >
           {UI_LOCALE_LABELS[l]}
