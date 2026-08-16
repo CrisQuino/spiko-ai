@@ -104,6 +104,19 @@ async function main() {
       del.status === 200 && !(list2.body.jds || []).some((j) => j.id === jdId));
   }
 
+  // 7c) list a member's personal JD and promote it to a team-wide company JD
+  {
+    const em = 'p2-jdowner@spiko-test.example';
+    const id = await ensureUser(em); await setProfile(id, em, { company_id: companyId, plan: 'corporate' });
+    await admin(`/rest/v1/job_descriptions?user_id=eq.${id}`, { method: 'DELETE' });
+    const ins = await (await admin('/rest/v1/job_descriptions', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ user_id: id, company_id: null, title: 'Personal JD', content: 'mine', visibility: 'personal' }) })).json();
+    const jdId = Array.isArray(ins) ? ins[0].id : ins.id;
+    const list = await api('list_member_jds', { company_id: companyId }, adminTok);
+    const prom = await api('promote_jd', { id: jdId, company_id: companyId }, adminTok);
+    const after = (await dbRow(`/rest/v1/job_descriptions?select=visibility&id=eq.${jdId}`))[0];
+    check('7c list_member_jds + promote_jd → company', list.status === 200 && (list.body.jds || []).some((j) => j.id === jdId && j.owner_email === em) && prom.status === 200 && after.visibility === 'company');
+  }
+
   // Seat p2-user as a member for the role / ban / removal cases.
   await setProfile(userId, USER_EMAIL, { company_id: companyId, plan: 'corporate' });
   const teamStatus = async (tok) => (await fetch(`${BASE}/api/team`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` }, body: JSON.stringify({ action: 'overview' }) })).status;

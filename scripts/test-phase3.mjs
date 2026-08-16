@@ -199,6 +199,18 @@ async function main() {
       upd.status === 200 && upd.body.jd?.title === 'Team JD v2' && del.status === 200 && !(list2.body.jds || []).some((j) => j.id === jid));
   }
 
+  // 21) manager lists a member's personal JD and promotes it team-wide
+  {
+    const em = `jdowner@${DOMAIN}`; const id = await ensureUser(em); await setProfile(id, em, { company_id: cid, plan: 'corporate' });
+    await admin(`/rest/v1/job_descriptions?user_id=eq.${id}`, { method: 'DELETE' });
+    const ins = await (await admin('/rest/v1/job_descriptions', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ user_id: id, company_id: null, title: 'Personal JD', content: 'x', visibility: 'personal' }) })).json();
+    const jdId = Array.isArray(ins) ? ins[0].id : ins.id;
+    const list = await team('list_member_jds', {}, mgrTok);
+    const prom = await team('promote_jd', { id: jdId }, mgrTok);
+    const after = (await dbRow(`/rest/v1/job_descriptions?select=visibility,company_id&id=eq.${jdId}`))[0];
+    check('21 manager list_member_jds + promote_jd', list.status === 200 && (list.body.jds || []).some((j) => j.id === jdId) && prom.status === 200 && after.visibility === 'company' && after.company_id === cid);
+  }
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${failed.length ? '❌ ' + failed.length + ' FAILED' : '✅ ALL ' + results.length + ' PASSED'}`);
   process.exit(failed.length ? 1 : 0);

@@ -195,6 +195,28 @@ export async function POST(request: NextRequest) {
         await db.from('job_descriptions').delete().eq('id', id).eq('visibility', 'company');
         return NextResponse.json({ ok: true });
       }
+      case 'list_member_jds': {
+        // Personal JDs created by a company's members — candidates to promote to
+        // the whole team.
+        const { company_id } = body;
+        const { data: members } = await db.from('profiles').select('id, email').eq('company_id', company_id);
+        const ids = (members || []).map((m: any) => m.id);
+        if (!ids.length) return NextResponse.json({ jds: [] });
+        const emap = new Map((members || []).map((m: any) => [m.id, m.email]));
+        const { data } = await db.from('job_descriptions').select('id, title, user_id, created_at').in('user_id', ids).eq('visibility', 'personal').order('created_at', { ascending: false });
+        const jds = (data || []).map((j: any) => ({ id: j.id, title: j.title, owner_email: emap.get(j.user_id) || null, created_at: j.created_at }));
+        return NextResponse.json({ jds });
+      }
+      case 'promote_jd': {
+        // Promote a member's personal JD to a team-wide company JD.
+        const { id, company_id } = body;
+        const { data: jd } = await db.from('job_descriptions').select('user_id').eq('id', id).single();
+        if (!jd) return NextResponse.json({ error: 'jd_not_found' }, { status: 404 });
+        const { data: owner } = await db.from('profiles').select('company_id').eq('id', jd.user_id).single();
+        if (!owner || owner.company_id !== company_id) return NextResponse.json({ error: 'not_in_company' }, { status: 403 });
+        await db.from('job_descriptions').update({ visibility: 'company', company_id }).eq('id', id);
+        return NextResponse.json({ ok: true });
+      }
       case 'set_member_role': {
         // Promote/demote an EXISTING company member between manager and employee.
         // This is how a company created before the invite flow (or any company)

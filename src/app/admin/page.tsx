@@ -464,9 +464,16 @@ function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite
 
   // Company JDs (team-wide), managed via a scrollable list + upload/edit modal.
   const [jds, setJds] = useState<CompanyJd[] | null>(null);
+  const [memberJds, setMemberJds] = useState<{ id: string; title: string; owner_email: string | null; created_at: string }[]>([]);
   const [jdModal, setJdModal] = useState<null | { mode: 'new' | 'edit'; id?: string; title: string; content: string }>(null);
   const loadJds = async () => { const r = await api('list_company_jds', { company_id: c.id }); setJds(r.body?.jds || []); };
-  useEffect(() => { loadJds(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [c.id]);
+  const loadMemberJds = async () => { const r = await api('list_member_jds', { company_id: c.id }); setMemberJds(r.body?.jds || []); };
+  useEffect(() => { loadJds(); loadMemberJds(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [c.id]);
+  const promoteJd = async (jdId: string) => {
+    const r = await api('promote_jd', { id: jdId, company_id: c.id });
+    if (r.status === 200) { flash('✓ JD promoted — now shared with the whole team'); loadJds(); loadMemberJds(); }
+    else flash(`✕ ${r.body?.error || 'error'}`);
+  };
   const saveJd = async () => {
     if (!jdModal) return;
     if (!jdModal.title.trim() || !jdModal.content.trim()) return flash('✕ title and content required');
@@ -556,6 +563,23 @@ function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite
                 <span className="truncate min-w-0">{j.title}</span>
                 <span className="text-gray-400 shrink-0">{new Date(j.created_at).toLocaleDateString()} · edit ›</span>
               </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Members' personal JDs — promote any to the whole team */}
+      <div>
+        <h4 className="font-mono text-xs text-gray-500 mb-2">member_jds() [{memberJds.length}] <span className="text-gray-400">— members&apos; personal JDs; promote one to share with the whole team</span></h4>
+        {memberJds.length === 0 ? (
+          <p className="font-mono text-xs text-gray-400">// no personal member JDs</p>
+        ) : (
+          <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+            {memberJds.map((j) => (
+              <div key={j.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-white/60 font-mono text-xs">
+                <span className="truncate min-w-0">{j.title} <span className="text-gray-400">· {j.owner_email}</span></span>
+                <button onClick={() => promoteJd(j.id)} className="px-2 py-1 rounded bg-indigo-100 text-indigo-700 hover:bg-indigo-200 shrink-0" title="Make this a team-wide company JD">promote_to_team()</button>
+              </div>
             ))}
           </div>
         )}
