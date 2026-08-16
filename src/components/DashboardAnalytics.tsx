@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { type AdminLesson } from '@/lib/admin-queries';
 import { useUi } from '@/lib/ui-i18n';
+import CefrTrendChart from '@/components/CefrTrendChart';
 
 type Lang = 'global' | 'en' | 'fr' | 'pt';
 type Granularity = 'day' | 'month';
@@ -188,6 +189,9 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
           <div className="flex flex-col justify-between h-56 text-left text-xs font-mono text-cyan-600 py-1 shrink-0 w-8"><span>{usersAxis}</span><span>{Math.round(usersAxis / 2)}</span><span>0</span></div>
         </div>
       </div>
+
+      {/* CEFR progress — target vs assessed (respects language + range + granularity) */}
+      <CefrTrendChart lessons={langLessons} granularity={granularity} rangeStart={rangeStart} rangeEnd={rangeEnd} />
 
       {/* Top users + CEFR */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

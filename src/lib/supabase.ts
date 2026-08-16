@@ -221,6 +221,20 @@ export async function getUserConversations(userId: string): Promise<Conversation
   return (data || []).map(mapLessonToConversation);
 }
 
+// Minimal per-session rows (own sessions via RLS) for the CEFR target-vs-assessed
+// trend chart on the individual dashboard.
+export type CefrLesson = { completed_at: string; language: string; target_level: string | null; cefr_overall: string | null };
+export async function getUserCefrLessons(userId: string): Promise<CefrLesson[]> {
+  const { data, error } = await supabase
+    .from('lesson_costs')
+    .select('completed_at, language, target_level, cefr_overall')
+    .eq('user_id', userId)
+    .not('completed_at', 'is', null)
+    .order('completed_at', { ascending: false });
+  if (error) { console.error('Error fetching CEFR lessons:', error); return []; }
+  return (data || []) as CefrLesson[];
+}
+
 export async function getCompanyConversations(companyId: string): Promise<Conversation[]> {
   const { data, error } = await supabase
     .from('conversations')

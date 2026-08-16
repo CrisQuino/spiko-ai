@@ -1,0 +1,107 @@
+'use client';
+
+/**
+ * CEFR trend: two lines over time — the TARGET level the learner aimed for and
+ * the ASSESSED level they actually demonstrated. When several sessions fall on
+ * the same bucket, each line is the average of that bucket's levels, floored to
+ * a whole CEFR band (always rounds DOWN). Shared by the individual, team, and
+ * super-admin dashboards; the caller passes an already language-filtered set and
+ * the active granularity + date range, so it tracks every page filter.
+ */
+
+import { useMemo } from 'react';
+
+type Row = { completed_at: string; target_level: string | null; cefr_overall: string | null };
+
+const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+const idx = (l: string | null | undefined) => (l ? LEVELS.indexOf(l) : -1);
+const pad = (n: number) => String(n).padStart(2, '0');
+const dayKey = (s: string) => { const d = new Date(s); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const monthKey = (s: string) => { const d = new Date(s); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+
+export default function CefrTrendChart({
+  lessons, granularity = 'day', rangeStart, rangeEnd,
+}: { lessons: Row[]; granularity?: 'day' | 'month'; rangeStart?: string; rangeEnd?: string }) {
+  const series = useMemo(() => {
+    const inRange = (s: string) => { const k = dayKey(s); return (!rangeStart || k >= rangeStart) && (!rangeEnd || k <= rangeEnd); };
+    const buckets: Record<string, { key: string; t: number[]; a: number[] }> = {};
+    lessons.filter((l) => inRange(l.completed_at)).forEach((l) => {
+      const key = granularity === 'day' ? dayKey(l.completed_at) : monthKey(l.completed_at);
+      if (!buckets[key]) buckets[key] = { key, t: [], a: [] };
+      const ti = idx(l.target_level); if (ti >= 0) buckets[key].t.push(ti);
+      const ai = idx(l.cefr_overall); if (ai >= 0) buckets[key].a.push(ai);
+    });
+    return Object.values(buckets)
+      .map((b) => ({
+        key: b.key,
+        // Average, then floor (always round DOWN) to a whole CEFR band.
+        target: b.t.length ? Math.floor(b.t.reduce((s, v) => s + v, 0) / b.t.length) : null,
+        assessed: b.a.length ? Math.floor(b.a.reduce((s, v) => s + v, 0) / b.a.length) : null,
+      }))
+      .sort((a, b) => (a.key < b.key ? -1 : 1));
+  }, [lessons, granularity, rangeStart, rangeEnd]);
+
+  const xAt = (i: number) => (series.length > 1 ? 8 + (i / (series.length - 1)) * 84 : 50);
+  const yAt = (v: number) => 100 - (v / 5) * 100; // 0..5 → bottom..top
+  const line = (key: 'target' | 'assessed') =>
+    series.map((s, i) => (s[key] == null ? null : `${xAt(i)},${yAt(s[key] as number)}`)).filter(Boolean).join(' ');
+
+  return (
+    <div className="glass rounded-2xl p-6 border border-gray-200/50">
+      <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
+        <h2 className="text-xl font-bold font-mono"><span className="text-gray-400">// </span>cefr_progress()</h2>
+        <div className="flex items-center gap-4 font-mono text-xs">
+          <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>assessed</span>
+          <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-0.5 bg-amber-500" style={{ borderTop: '2px dashed #f59e0b', height: 0 }}></span>target</span>
+          <span className="text-gray-400">({granularity === 'day' ? 'per day' : 'per month'}, avg ⌊·⌋)</span>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        {/* Y axis — CEFR bands */}
+        <div className="flex flex-col-reverse justify-between h-56 text-right text-xs font-mono text-gray-400 py-1 shrink-0 w-8">
+          {LEVELS.map((l) => <span key={l}>{l}</span>)}
+        </div>
+        <div className="flex-1 overflow-x-auto">
+          <div className="min-w-[500px]">
+            <div className="relative h-56 border-l border-b border-gray-200">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
+                {[0, 1, 2, 3, 4, 5].map((v) => <line key={v} x1="0" y1={yAt(v)} x2="100" y2={yAt(v)} stroke="#f3f4f6" strokeWidth="0.5" />)}
+                {series.length > 1 && (
+                  <>
+                    <polyline fill="none" stroke="#f59e0b" strokeWidth="2" strokeDasharray="4 3" vectorEffect="non-scaling-stroke" points={line('target')} />
+                    <polyline fill="none" stroke="#10b981" strokeWidth="2" vectorEffect="non-scaling-stroke" points={line('assessed')} />
+                  </>
+                )}
+              </svg>
+              {series.map((s, i) => {
+                const x = xAt(i);
+                return (
+                  <div key={s.key}>
+                    {s.target != null && (
+                      <div className="absolute w-2.5 h-2.5 rounded-full bg-amber-500 border-2 border-white shadow" style={{ left: `${x}%`, top: `${yAt(s.target)}%`, transform: 'translate(-50%,-50%)' }} title={`target ${LEVELS[s.target]}`} />
+                    )}
+                    {s.assessed != null && (
+                      <>
+                        <div className="absolute w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white shadow" style={{ left: `${x}%`, top: `${yAt(s.assessed)}%`, transform: 'translate(-50%,-50%)' }} title={`assessed ${LEVELS[s.assessed]}`} />
+                        <span className="absolute text-[10px] font-mono font-bold text-emerald-700 whitespace-nowrap" style={{ left: `${x}%`, top: `${yAt(s.assessed)}%`, transform: 'translate(-50%,-165%)' }}>{LEVELS[s.assessed]}</span>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+              {series.length === 0 && <p className="absolute inset-0 flex items-center justify-center text-gray-400 font-mono text-sm">// no_cefr_data_in_range</p>}
+            </div>
+            <div className="relative h-4 mt-1">
+              {series.map((s, i) => (
+                <span key={s.key} className="absolute text-[10px] text-gray-400 font-mono -translate-x-1/2 whitespace-nowrap" style={{ left: `${xAt(i)}%` }}>
+                  {granularity === 'day' ? new Date(s.key).getUTCDate() : s.key.slice(2)}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

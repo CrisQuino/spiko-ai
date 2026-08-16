@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, getUserProfile, getUserConversations, getUserStats, type Profile, type Conversation, type UserStats } from '@/lib/supabase';
+import { supabase, getUserProfile, getUserConversations, getUserStats, getUserCefrLessons, type Profile, type Conversation, type UserStats, type CefrLesson } from '@/lib/supabase';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import PracticeSetup from '@/components/PracticeSetup';
+import CefrTrendChart from '@/components/CefrTrendChart';
 import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
+
+type Lang = 'global' | 'en' | 'fr' | 'pt';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -20,6 +23,9 @@ export default function DashboardPage() {
   const [isManager, setIsManager] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [cefrLessons, setCefrLessons] = useState<CefrLesson[]>([]);
+  const [lang, setLang] = useState<Lang>('global');
+  const [granularity, setGranularity] = useState<'day' | 'month'>('day');
 
   useEffect(() => {
     // Check for error messages from redirect
@@ -71,14 +77,16 @@ export default function DashboardPage() {
         userProfile.full_name = displayName;
       }
 
-      const [userStats, userConversations] = await Promise.all([
+      const [userStats, userConversations, userCefr] = await Promise.all([
         getUserStats(user.id),
-        getUserConversations(user.id)
+        getUserConversations(user.id),
+        getUserCefrLessons(user.id),
       ]);
 
       setProfile(userProfile);
       setStats(userStats);
       setConversations(userConversations || []);
+      setCefrLessons(userCefr || []);
       setLoading(false);
     } catch (error) {
       console.error('Error loading dashboard:', error);
@@ -179,6 +187,21 @@ export default function DashboardPage() {
           </p>
         </motion.div>
 
+        {/* Global + language filters (drive the CEFR progress chart) */}
+        <div className="flex items-center justify-end gap-3 mb-4 flex-wrap">
+          <div className="flex gap-1">
+            {(['day', 'month'] as const).map((g) => (
+              <button key={g} onClick={() => setGranularity(g)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${granularity === g ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{g === 'day' ? 'Days' : 'Months'}</button>
+            ))}
+          </div>
+          <div className="flex gap-1 items-center">
+            <span className="font-mono text-xs text-gray-400 mr-1">Filter:</span>
+            {(['global', 'en', 'fr', 'pt'] as const).map((opt) => (
+              <button key={opt} onClick={() => setLang(opt)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${lang === opt ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{opt === 'global' ? 'Global' : opt.toUpperCase()}</button>
+            ))}
+          </div>
+        </div>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard
@@ -208,6 +231,14 @@ export default function DashboardPage() {
             value={stats?.lastActivity ? d.dashboard.recently : d.dashboard.noActivity}
             subtitle={d.dashboard.mostRecent}
             delay={0.3}
+          />
+        </div>
+
+        {/* CEFR progress — target vs assessed (avg ⌊·⌋ per bucket), filtered */}
+        <div className="mb-8">
+          <CefrTrendChart
+            lessons={(lang === 'global' ? cefrLessons : cefrLessons.filter((l) => l.language === lang))}
+            granularity={granularity}
           />
         </div>
 
@@ -248,7 +279,7 @@ export default function DashboardPage() {
                   </button>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
                   {conversations.map((conv, i) => (
                     <Link
                       key={i}
