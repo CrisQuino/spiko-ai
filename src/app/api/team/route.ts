@@ -70,9 +70,14 @@ export async function POST(request: NextRequest) {
         // (same shape the super-admin dashboard uses, filtered to this company).
         const { data: members } = await db.from('profiles').select('id').eq('company_id', companyId);
         const ids = (members || []).map((m: any) => m.id);
-        if (!ids.length) return NextResponse.json({ lessons: [] });
+        if (!ids.length) return NextResponse.json({ lessons: [], priceView: true });
         const { data } = await db.from('admin_lessons_detail').select('*').in('user_id', ids).order('completed_at', { ascending: false });
-        return NextResponse.json({ lessons: data || [] });
+        // Business protection: managers see PRICE, never raw API cost. Apply the
+        // super-admin margin server-side and never send the underlying cost.
+        const { data: settings } = await db.from('platform_settings').select('margin_pct').eq('id', 1).single();
+        const mult = 1 + (Number(settings?.margin_pct) || 0) / 100;
+        const priced = (data || []).map((l: any) => ({ ...l, total_cost: Number(l.total_cost || 0) * mult }));
+        return NextResponse.json({ lessons: priced, priceView: true });
       }
       case 'set_domain_mode': {
         // Manager sets their own company's invite-domain policy.

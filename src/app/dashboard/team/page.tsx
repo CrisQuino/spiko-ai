@@ -157,7 +157,7 @@ export default function TeamDashboardPage() {
         <div className="flex justify-end"><LanguageSwitcher /></div>
 
         {/* Company-scoped analytics — same panels as the super-admin dashboard */}
-        <DashboardAnalytics lessons={lessons} />
+        <DashboardAnalytics lessons={lessons} priceView />
 
         {/* Company management */}
         <div className="glass rounded-2xl p-6 border border-gray-200/50 space-y-6">

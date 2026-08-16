@@ -41,8 +41,17 @@ function niceScale(dataMax: number, intervals = 4, integer = false): { max: numb
 }
 type SortKey = 'cost' | 'usage' | 'cefr';
 
-export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/session' }: { lessons: AdminLesson[]; sessionHref?: string }) {
+export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/session', priceView = false }: { lessons: AdminLesson[]; sessionHref?: string; priceView?: boolean }) {
   const { d } = useUi();
+  // Managers see PRICE (cost already marked-up server-side); super-admin sees
+  // raw API cost. Only the labels differ here — the numbers arrive correct.
+  const lbl = {
+    total: priceView ? 'Total Price' : d.admin.totalCost,
+    avg: priceView ? 'Avg Price' : d.admin.avgCost,
+    chart: priceView ? 'revenue()' : 'api_ai_costs()',
+    col: priceView ? 'Price' : d.admin.cost,
+    sort: priceView ? 'price' : 'cost',
+  };
   const [lang, setLang] = useState<Lang>('global');
   const [granularity, setGranularity] = useState<Granularity>('day');
   const [rangeStart, setRangeStart] = useState<string>(() => { const x = new Date(); x.setDate(x.getDate() - 30); return x.toISOString().slice(0, 10); });
@@ -151,16 +160,16 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KPICard title={d.admin.totalCost} value={`$${kpis.cost.toFixed(2)}`} subtitle={`${kpis.lessons} ${d.admin.lessons}`} icon="💰" trend={kpis.cost > 0 ? 'up' : 'neutral'} />
+        <KPICard title={lbl.total} value={`$${kpis.cost.toFixed(2)}`} subtitle={`${kpis.lessons} ${d.admin.lessons}`} icon="💰" trend={kpis.cost > 0 ? 'up' : 'neutral'} />
         <KPICard title={d.admin.activeUsers} value={kpis.users.toString()} subtitle={d.admin.thisMonth} icon="👥" trend="up" />
         <KPICard title={d.admin.lessonsToday} value={kpis.today.toString()} subtitle={new Date().toLocaleDateString()} icon="📚" trend="neutral" />
-        <KPICard title={d.admin.avgCost} value={`$${kpis.avg.toFixed(4)}`} subtitle={`${(kpis.tokens / 1000).toFixed(0)}k ${d.admin.tokens}`} icon="📊" trend="down" />
+        <KPICard title={lbl.avg} value={`$${kpis.avg.toFixed(4)}`} subtitle={`${(kpis.tokens / 1000).toFixed(0)}k ${d.admin.tokens}`} icon="📊" trend="down" />
       </div>
 
       {/* API AI Costs */}
       <div className="glass rounded-2xl p-6 border border-gray-200/50">
         <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
-          <h2 className="text-xl font-bold font-mono"><span className="text-gray-400">// </span>api_ai_costs()</h2>
+          <h2 className="text-xl font-bold font-mono"><span className="text-gray-400">// </span>{lbl.chart}</h2>
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex gap-1">
               {(['day', 'month'] as const).map((g) => (
@@ -258,8 +267,8 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
           </div>
           <div className="flex gap-1 mb-3">
             <span className="font-mono text-xs text-gray-400 mr-1 self-center">by:</span>
-            {([['usage', 'usage'], ['cost', 'cost'], ['cefr', 'CEFR']] as const).map(([k, lbl]) => (
-              <button key={k} onClick={() => setTopSort(k)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${topSort === k ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{lbl}</button>
+            {([['usage', 'usage'], ['cost', lbl.sort], ['cefr', 'CEFR']] as const).map(([k, label]) => (
+              <button key={k} onClick={() => setTopSort(k)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${topSort === k ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{label}</button>
             ))}
           </div>
           <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
@@ -327,7 +336,7 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">{d.admin.duration}</th>
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">CEFR</th>
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">Tokens</th>
-                <th className="text-right py-3 px-4 font-mono text-sm text-gray-600">{d.admin.cost}</th>
+                <th className="text-right py-3 px-4 font-mono text-sm text-gray-600">{lbl.col}</th>
               </tr>
             </thead>
             <tbody>

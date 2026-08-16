@@ -256,7 +256,7 @@ export async function POST(request: NextRequest) {
       case 'update_settings': {
         const { patch } = body;
         const clean: Record<string, number> = {};
-        for (const k of ['free_monthly_sessions', 'free_max_jds', 'premium_max_jds']) {
+        for (const k of ['free_monthly_sessions', 'free_max_jds', 'premium_max_jds', 'margin_pct']) {
           if (patch?.[k] != null && patch[k] !== '') clean[k] = Number(patch[k]);
         }
         const { data, error } = await db.from('platform_settings').update({ ...clean, updated_at: new Date().toISOString() }).eq('id', 1).select().single();
