@@ -65,6 +65,66 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      case 'analytics': {
+        // Company-scoped lesson data for the manager dashboard's analytics panels
+        // (same shape the super-admin dashboard uses, filtered to this company).
+        const { data: members } = await db.from('profiles').select('id').eq('company_id', companyId);
+        const ids = (members || []).map((m: any) => m.id);
+        if (!ids.length) return NextResponse.json({ lessons: [] });
+        const { data } = await db.from('admin_lessons_detail').select('*').in('user_id', ids).order('completed_at', { ascending: false });
+        return NextResponse.json({ lessons: data || [] });
+      }
+      case 'set_domain_mode': {
+        // Manager sets their own company's invite-domain policy.
+        const mode = body.mode === 'manager' ? 'manager' : 'any';
+        let domain: string | null = null;
+        if (mode === 'manager') {
+          const { data: mgr } = await db.from('profiles').select('email').eq('company_id', companyId).eq('role', 'manager').limit(1).maybeSingle();
+          domain = mgr?.email?.includes('@') ? mgr.email.split('@')[1].toLowerCase() : null;
+        }
+        const { data, error } = await db.from('companies').update({ domain_mode: mode, allowed_email_domain: domain }).eq('id', companyId).select().single();
+        if (error) throw error;
+        return NextResponse.json({ company: data });
+      }
+      case 'set_member_role': {
+        // Promote/demote a member (co-managers allowed) within THIS company only.
+        const { user_id, role } = body as { user_id?: string; role?: string };
+        if (!user_id || (role !== 'manager' && role !== 'employee')) return NextResponse.json({ error: 'user_id and role required' }, { status: 400 });
+        const { data: target } = await db.from('profiles').select('id, email, company_id').eq('id', user_id).single();
+        if (!target || target.company_id !== companyId) return NextResponse.json({ error: 'not_in_team' }, { status: 404 });
+        await db.from('profiles').update({ role }).eq('id', user_id);
+        if (role === 'manager' && target.email?.includes('@')) {
+          const { data: comp } = await db.from('companies').select('domain_mode').eq('id', companyId).single();
+          if (comp?.domain_mode === 'manager') {
+            await db.from('companies').update({ allowed_email_domain: target.email.split('@')[1].toLowerCase() }).eq('id', companyId);
+          }
+        }
+        return NextResponse.json({ ok: true, role });
+      }
+      case 'list_company_jds': {
+        const { data } = await db.from('job_descriptions').select('id, title, content, created_at').eq('company_id', companyId).eq('visibility', 'company').order('created_at', { ascending: false });
+        return NextResponse.json({ jds: data || [] });
+      }
+      case 'upload_company_jd': {
+        const { title, content } = body;
+        if (!title?.trim() || !content?.trim()) return NextResponse.json({ error: 'title, content required' }, { status: 400 });
+        const { data, error } = await db.from('job_descriptions').insert({ user_id: user.id, company_id: companyId, title: title.trim(), content: content.trim(), visibility: 'company' }).select().single();
+        if (error) throw error;
+        return NextResponse.json({ jd: data });
+      }
+      case 'update_company_jd': {
+        const { id, title, content } = body;
+        if (!id || !title?.trim() || !content?.trim()) return NextResponse.json({ error: 'id, title, content required' }, { status: 400 });
+        const { data, error } = await db.from('job_descriptions').update({ title: title.trim(), content: content.trim() }).eq('id', id).eq('company_id', companyId).eq('visibility', 'company').select().single();
+        if (error) throw error;
+        return NextResponse.json({ jd: data });
+      }
+      case 'delete_company_jd': {
+        const { id } = body;
+        await db.from('job_descriptions').delete().eq('id', id).eq('company_id', companyId).eq('visibility', 'company');
+        return NextResponse.json({ ok: true });
+      }
+
       case 'invite_member': {
         const email = String(body.email || '').trim().toLowerCase();
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
