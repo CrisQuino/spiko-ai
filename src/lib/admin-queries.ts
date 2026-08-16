@@ -60,6 +60,8 @@ export interface AdminLesson {
   target_level: string | null;
   duration_seconds: number | null;
   scenario_title: string | null;
+  company_id: string | null;
+  company_name: string | null;
 }
 
 /**

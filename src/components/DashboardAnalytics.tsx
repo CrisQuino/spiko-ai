@@ -26,11 +26,14 @@ const CEFR = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 // so gridlines and labels always line up with the data — and with BOTH axes of a
 // dual-axis chart — and the axis grows on its own as numbers get bigger, no
 // manual tuning. Always returns `intervals`+1 ticks from 0..max (max ≥ dataMax).
-function niceScale(dataMax: number, intervals = 4): { max: number; ticks: number[] } {
+function niceScale(dataMax: number, intervals = 4, integer = false): { max: number; ticks: number[] } {
   const raw = (dataMax > 0 ? dataMax : 1) / intervals;
   const mag = Math.pow(10, Math.floor(Math.log10(raw)));
   const norm = raw / mag;
-  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  let step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  // Count axes (lessons, active users) can never be fractional — force a whole
+  // step of at least 1, so ticks like 0.5 / 1.5 users never appear.
+  if (integer) step = Math.max(1, Math.ceil(step));
   const max = step * intervals;
   const ticks: number[] = [];
   for (let i = 0; i <= intervals; i++) ticks.push(+(step * i).toFixed(6));
@@ -46,8 +49,25 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
   const [rangeEnd, setRangeEnd] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [selectedUser, setSelectedUser] = useState<{ id: string; email: string | null } | null>(null);
   const [topSort, setTopSort] = useState<SortKey>('cost');
+  // 'all' | 'b2c' (no company) | '<company_id>'
+  const [company, setCompany] = useState<string>('all');
 
-  const langLessons = useMemo(() => (lang === 'global' ? lessons : lessons.filter((l) => l.language === lang)), [lessons, lang]);
+  // Distinct companies present in the data — drives the company filter. B2C =
+  // lessons whose owner has no company_id (individual/self-serve users).
+  const companyOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    let hasB2c = false;
+    lessons.forEach((l) => { if (l.company_id) m.set(l.company_id, l.company_name || l.company_id); else hasB2c = true; });
+    return { companies: [...m.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)), hasB2c };
+  }, [lessons]);
+  // The company filter drives EVERYTHING (KPIs included), applied before language.
+  const companyLessons = useMemo(() => {
+    if (company === 'all') return lessons;
+    if (company === 'b2c') return lessons.filter((l) => !l.company_id);
+    return lessons.filter((l) => l.company_id === company);
+  }, [lessons, company]);
+
+  const langLessons = useMemo(() => (lang === 'global' ? companyLessons : companyLessons.filter((l) => l.language === lang)), [companyLessons, lang]);
   // Everything except the "this month/today" KPIs derives from the date range.
   const rangeLessons = useMemo(() => {
     const inRange = (s: string) => { const k = dayKey(s); return (!rangeStart || k >= rangeStart) && (!rangeEnd || k <= rangeEnd); };
@@ -81,8 +101,8 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
 
   const rangeTotal = useMemo(() => series.reduce((s, b) => s + b.cost, 0), [series]);
   const costScale = useMemo(() => niceScale(Math.max(0, ...series.map((s) => s.cost))), [series]);
-  const lessonsScale = useMemo(() => niceScale(Math.max(0, ...series.map((s) => s.lessons))), [series]);
-  const usersScale = useMemo(() => niceScale(Math.max(0, ...series.map((s) => s.users))), [series]);
+  const lessonsScale = useMemo(() => niceScale(Math.max(0, ...series.map((s) => s.lessons)), 4, true), [series]);
+  const usersScale = useMemo(() => niceScale(Math.max(0, ...series.map((s) => s.users)), 4, true), [series]);
   const xAt = (i: number) => (series.length > 1 ? 8 + (i / (series.length - 1)) * 84 : 50);
 
   const users = useMemo(() => {
@@ -115,11 +135,19 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
     return { counts, total };
   }, [scoped]);
 
-  const recent = useMemo(() => scoped.slice(0, selectedUser ? 100 : 20), [scoped, selectedUser]);
+  const recent = useMemo(
+    () => [...scoped].sort((a, b) => (a.completed_at < b.completed_at ? 1 : -1)).slice(0, selectedUser ? 100 : 20),
+    [scoped, selectedUser],
+  );
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-end"><LangSelector value={lang} onChange={setLang} /></div>
+      <div className="flex items-center justify-end gap-3 flex-wrap">
+        {companyOptions.companies.length + (companyOptions.hasB2c ? 1 : 0) > 1 && (
+          <CompanySelector value={company} onChange={(v) => { setCompany(v); setSelectedUser(null); }} options={companyOptions} />
+        )}
+        <LangSelector value={lang} onChange={setLang} />
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -348,6 +376,19 @@ function LangSelector({ value, onChange }: { value: Lang; onChange: (l: Lang) =>
       {(['global', 'en', 'fr', 'pt'] as const).map((opt) => (
         <button key={opt} onClick={() => onChange(opt)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${value === opt ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{opt === 'global' ? 'Global' : opt.toUpperCase()}</button>
       ))}
+    </div>
+  );
+}
+
+function CompanySelector({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { companies: { id: string; name: string }[]; hasB2c: boolean } }) {
+  return (
+    <div className="flex gap-1 items-center">
+      <span className="font-mono text-xs text-gray-400 mr-1">Company:</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="bg-white/70 border border-gray-200 rounded-md px-2 py-1 font-mono text-xs text-gray-700">
+        <option value="all">All</option>
+        {options.hasB2c && <option value="b2c">B2C (individuals)</option>}
+        {options.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
     </div>
   );
 }
