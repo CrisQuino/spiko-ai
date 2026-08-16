@@ -9,8 +9,6 @@ import PracticeSetup from '@/components/PracticeSetup';
 import CefrTrendChart from '@/components/CefrTrendChart';
 import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
-type Lang = 'global' | 'en' | 'fr' | 'pt';
-
 export default function DashboardPage() {
   const router = useRouter();
   const { d } = useUi();
@@ -24,8 +22,6 @@ export default function DashboardPage() {
   const [showHistory, setShowHistory] = useState(true);
   const [setupOpen, setSetupOpen] = useState(false);
   const [cefrLessons, setCefrLessons] = useState<CefrLesson[]>([]);
-  const [lang, setLang] = useState<Lang>('global');
-  const [granularity, setGranularity] = useState<'day' | 'month'>('day');
 
   useEffect(() => {
     // Check for error messages from redirect
@@ -187,21 +183,6 @@ export default function DashboardPage() {
           </p>
         </motion.div>
 
-        {/* Global + language filters (drive the CEFR progress chart) */}
-        <div className="flex items-center justify-end gap-3 mb-4 flex-wrap">
-          <div className="flex gap-1">
-            {(['day', 'month'] as const).map((g) => (
-              <button key={g} onClick={() => setGranularity(g)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${granularity === g ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{g === 'day' ? 'Days' : 'Months'}</button>
-            ))}
-          </div>
-          <div className="flex gap-1 items-center">
-            <span className="font-mono text-xs text-gray-400 mr-1">Filter:</span>
-            {(['global', 'en', 'fr', 'pt'] as const).map((opt) => (
-              <button key={opt} onClick={() => setLang(opt)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${lang === opt ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{opt === 'global' ? 'Global' : opt.toUpperCase()}</button>
-            ))}
-          </div>
-        </div>
-
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard
@@ -234,12 +215,9 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* CEFR progress — target vs assessed (avg ⌊·⌋ per bucket), filtered */}
+        {/* CEFR progress — target vs assessed (avg ⌊·⌋); owns its own filters */}
         <div className="mb-8">
-          <CefrTrendChart
-            lessons={(lang === 'global' ? cefrLessons : cefrLessons.filter((l) => l.language === lang))}
-            granularity={granularity}
-          />
+          <CefrTrendChart lessons={cefrLessons} standalone />
         </div>
 
         {/* Two Column Layout */}
