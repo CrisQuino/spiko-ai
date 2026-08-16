@@ -78,12 +78,12 @@ export default function Home() {
             >
               {isLoggedIn ? 'dashboard()' : 'login()'}
             </button>
-            <Link 
-              href="/demo"
+            <a
+              href="#demo"
               className="px-6 py-2 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white rounded-lg hover:shadow-xl transition-all font-mono text-sm"
             >
               demo.run()
-            </Link>
+            </a>
           </div>
 
           <div className="md:hidden flex items-center space-x-4">
@@ -187,14 +187,14 @@ export default function Home() {
                 </span>
                 <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 via-cyan-600 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               </Link>
-              <Link 
-                href="/demo"
+              <a
+                href="#demo"
                 className="w-full sm:w-auto px-8 py-4 glass border-2 border-gray-300 text-gray-800 text-lg font-mono font-semibold rounded-xl hover:border-cyan-500 transition-all hover:shadow-lg"
               >
                 <span className="flex items-center justify-center">
                   <span className="mr-2 text-cyan-600">▶</span> demo.run()
                 </span>
-              </Link>
+              </a>
             </div>
 
             <motion.div
@@ -217,6 +217,31 @@ export default function Home() {
               </div>
             </motion.div>
           </motion.div>
+        </div>
+      </section>
+
+      {/* Demo video Section */}
+      <section id="demo" className="py-20 px-6 bg-white/50 scroll-mt-24">
+        <div className="container mx-auto max-w-4xl text-center">
+          <h2 className="text-3xl md:text-4xl font-bold font-mono mb-3">
+            <span className="text-gray-400">// </span><span className="gradient-text">demo.run()</span>
+          </h2>
+          <p className="text-gray-600 font-mono text-sm mb-8">
+            <span className="text-gray-400">// </span>una práctica real, de principio a fin
+          </p>
+          <div className="rounded-2xl overflow-hidden shadow-2xl border border-gray-200/50 glass">
+            <video className="w-full block" controls playsInline preload="metadata" poster="/demo/demo-poster.jpg">
+              <source src="/demo/demo-narrated.mp4" type="video/mp4" />
+            </video>
+          </div>
+          <div className="mt-8">
+            <Link
+              href="/demo"
+              className="inline-block px-8 py-4 bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 text-white text-lg font-mono font-semibold rounded-xl hover:shadow-xl transition-all"
+            >
+              <span className="mr-2">&gt;</span> try_it_live()
+            </Link>
+          </div>
         </div>
       </section>
 

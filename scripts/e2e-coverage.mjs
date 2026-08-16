@@ -24,14 +24,24 @@ const BASE = 'http://localhost:3000';
 // race a cold compile (which manifests as a transient fetch failure). Each hit
 // is unauthenticated (returns 401/403/400) but still triggers compilation.
 export async function warmup() {
-  const hit = async (method, path, body) => {
-    try { await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(25000) }); } catch { /* ignore */ }
+  // Hit a route until it's actually compiled — a cold Next dev route can answer
+  // 404 during compilation, so retry until we see a real (non-404) status.
+  const ready = async (method, path, body) => {
+    for (let i = 0; i < 10; i++) {
+      try {
+        const r = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
+        if (r.status !== 404) return true;
+      } catch { /* ignore, retry */ }
+      await new Promise((res) => setTimeout(res, 1500));
+    }
+    return false;
   };
   await Promise.all([
-    hit('POST', '/api/admin', { action: 'warm' }),
-    hit('POST', '/api/team', { action: 'warm' }),
-    hit('POST', '/api/lesson/start', {}),
-    hit('GET', '/api/invite/accept?token=warm'),
+    ready('POST', '/api/admin', { action: 'warm' }),
+    ready('POST', '/api/team', { action: 'warm' }),
+    ready('POST', '/api/lesson/start', {}),
+    ready('GET', '/api/invite/accept?token=warm'),
+    ready('POST', '/api/evaluate', {}),
   ]);
 }
 
