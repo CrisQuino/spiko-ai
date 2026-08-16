@@ -164,6 +164,41 @@ async function main() {
     await admin(`/rest/v1/profiles?id=eq.${m2id}`, { method: 'PATCH', body: JSON.stringify({ company_id: null, role: 'employee' }) });
   }
 
+  // 17) analytics returns company-scoped lessons array
+  {
+    const r = await team('analytics', {}, mgrTok);
+    check('17 analytics returns lessons array', r.status === 200 && Array.isArray(r.body.lessons), `${r.status}`);
+  }
+  // 18) set_domain_mode: 'manager' derives domain from the manager; 'any' clears it
+  {
+    const m = await team('set_domain_mode', { mode: 'manager' }, mgrTok);
+    const dm = (await dbRow(`/rest/v1/companies?select=domain_mode,allowed_email_domain&id=eq.${cid}`))[0];
+    const a = await team('set_domain_mode', { mode: 'any' }, mgrTok);
+    const dm2 = (await dbRow(`/rest/v1/companies?select=allowed_email_domain&id=eq.${cid}`))[0];
+    check('18 set_domain_mode manager/any', m.status === 200 && dm.domain_mode === 'manager' && dm.allowed_email_domain === DOMAIN && a.status === 200 && dm2.allowed_email_domain === null, `d=${dm.allowed_email_domain}`);
+  }
+  // 19) set_member_role co-manager promote + demote (within own company)
+  {
+    const em = `coemp@${DOMAIN}`; const id = await ensureUser(em); await setProfile(id, em, { company_id: cid, role: 'employee', plan: 'corporate' });
+    const p = await team('set_member_role', { user_id: id, role: 'manager' }, mgrTok);
+    const r1 = (await dbRow(`/rest/v1/profiles?select=role&id=eq.${id}`))[0].role;
+    const dd = await team('set_member_role', { user_id: id, role: 'employee' }, mgrTok);
+    const r2 = (await dbRow(`/rest/v1/profiles?select=role&id=eq.${id}`))[0].role;
+    check('19 set_member_role promote/demote', p.status === 200 && r1 === 'manager' && dd.status === 200 && r2 === 'employee', `${r1}->${r2}`);
+  }
+  // 20) manager company-JD CRUD (upload → list → update → delete)
+  {
+    const up = await team('upload_company_jd', { title: 'Team JD', content: 'Shared team content.' }, mgrTok);
+    const jid = up.body.jd?.id;
+    const list = await team('list_company_jds', {}, mgrTok);
+    const upd = await team('update_company_jd', { id: jid, title: 'Team JD v2', content: 'Updated.' }, mgrTok);
+    const del = await team('delete_company_jd', { id: jid }, mgrTok);
+    const list2 = await team('list_company_jds', {}, mgrTok);
+    check('20 manager company JD CRUD',
+      up.status === 200 && up.body.jd?.visibility === 'company' && (list.body.jds || []).some((j) => j.id === jid) &&
+      upd.status === 200 && upd.body.jd?.title === 'Team JD v2' && del.status === 200 && !(list2.body.jds || []).some((j) => j.id === jid));
+  }
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${failed.length ? '❌ ' + failed.length + ' FAILED' : '✅ ALL ' + results.length + ' PASSED'}`);
   process.exit(failed.length ? 1 : 0);
