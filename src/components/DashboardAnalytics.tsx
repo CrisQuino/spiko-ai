@@ -20,6 +20,23 @@ type Granularity = 'day' | 'month';
 const pad = (n: number) => String(n).padStart(2, '0');
 const dayKey = (s: string) => { const d = new Date(s); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const monthKey = (s: string) => { const d = new Date(s); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+const CEFR = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+
+// Auto-scaling axis: a fixed number of evenly-spaced "nice" ticks (1/2/5 ×10ⁿ),
+// so gridlines and labels always line up with the data — and with BOTH axes of a
+// dual-axis chart — and the axis grows on its own as numbers get bigger, no
+// manual tuning. Always returns `intervals`+1 ticks from 0..max (max ≥ dataMax).
+function niceScale(dataMax: number, intervals = 4): { max: number; ticks: number[] } {
+  const raw = (dataMax > 0 ? dataMax : 1) / intervals;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  const max = step * intervals;
+  const ticks: number[] = [];
+  for (let i = 0; i <= intervals; i++) ticks.push(+(step * i).toFixed(6));
+  return { max, ticks };
+}
+type SortKey = 'cost' | 'usage' | 'cefr';
 
 export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/session' }: { lessons: AdminLesson[]; sessionHref?: string }) {
   const { d } = useUi();
@@ -28,8 +45,14 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
   const [rangeStart, setRangeStart] = useState<string>(() => { const x = new Date(); x.setDate(x.getDate() - 30); return x.toISOString().slice(0, 10); });
   const [rangeEnd, setRangeEnd] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [selectedUser, setSelectedUser] = useState<{ id: string; email: string | null } | null>(null);
+  const [topSort, setTopSort] = useState<SortKey>('cost');
 
   const langLessons = useMemo(() => (lang === 'global' ? lessons : lessons.filter((l) => l.language === lang)), [lessons, lang]);
+  // Everything except the "this month/today" KPIs derives from the date range.
+  const rangeLessons = useMemo(() => {
+    const inRange = (s: string) => { const k = dayKey(s); return (!rangeStart || k >= rangeStart) && (!rangeEnd || k <= rangeEnd); };
+    return langLessons.filter((l) => inRange(l.completed_at));
+  }, [langLessons, rangeStart, rangeEnd]);
 
   const kpis = useMemo(() => {
     const now = new Date();
@@ -44,9 +67,8 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
   }, [langLessons]);
 
   const series = useMemo(() => {
-    const inRange = (s: string) => { const k = dayKey(s); return (!rangeStart || k >= rangeStart) && (!rangeEnd || k <= rangeEnd); };
     const buckets: Record<string, { key: string; cost: number; lessons: number; tokens: number; userSet: Set<string> }> = {};
-    langLessons.filter((l) => inRange(l.completed_at)).forEach((l) => {
+    rangeLessons.forEach((l) => {
       const key = granularity === 'day' ? dayKey(l.completed_at) : monthKey(l.completed_at);
       if (!buckets[key]) buckets[key] = { key, cost: 0, lessons: 0, tokens: 0, userSet: new Set() };
       buckets[key].cost += Number(l.total_cost || 0);
@@ -55,29 +77,36 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
       buckets[key].userSet.add(l.user_id);
     });
     return Object.values(buckets).map((b) => ({ key: b.key, cost: b.cost, lessons: b.lessons, tokens: b.tokens, users: b.userSet.size })).sort((a, b) => (a.key < b.key ? -1 : 1));
-  }, [langLessons, granularity, rangeStart, rangeEnd]);
+  }, [rangeLessons, granularity]);
 
-  const maxCost = useMemo(() => Math.max(0, ...series.map((s) => s.cost)), [series]);
   const rangeTotal = useMemo(() => series.reduce((s, b) => s + b.cost, 0), [series]);
-  const costAxis = useMemo(() => (maxCost > 0 ? maxCost * 1.18 : 1), [maxCost]);
-  const lessonsAxis = useMemo(() => Math.max(1, Math.ceil(Math.max(1, ...series.map((s) => s.lessons)) * 1.18)), [series]);
-  const usersAxis = useMemo(() => Math.max(1, Math.ceil(Math.max(1, ...series.map((s) => s.users)) * 1.18)), [series]);
+  const costScale = useMemo(() => niceScale(Math.max(0, ...series.map((s) => s.cost))), [series]);
+  const lessonsScale = useMemo(() => niceScale(Math.max(0, ...series.map((s) => s.lessons))), [series]);
+  const usersScale = useMemo(() => niceScale(Math.max(0, ...series.map((s) => s.users))), [series]);
   const xAt = (i: number) => (series.length > 1 ? 8 + (i / (series.length - 1)) * 84 : 50);
 
   const users = useMemo(() => {
-    const m: Record<string, { user_id: string; email: string | null; lessons: number; cost: number; tokens: number; last: string }> = {};
-    langLessons.forEach((l) => {
+    const m: Record<string, { user_id: string; email: string | null; lessons: number; cost: number; tokens: number; last: string; cefrSum: number; cefrN: number }> = {};
+    rangeLessons.forEach((l) => {
       const k = l.user_id;
-      if (!m[k]) m[k] = { user_id: k, email: l.email, lessons: 0, cost: 0, tokens: 0, last: l.completed_at };
+      if (!m[k]) m[k] = { user_id: k, email: l.email, lessons: 0, cost: 0, tokens: 0, last: l.completed_at, cefrSum: 0, cefrN: 0 };
       m[k].lessons += 1;
       m[k].cost += Number(l.total_cost || 0);
       m[k].tokens += Number(l.total_tokens || 0);
       if (l.completed_at > m[k].last) m[k].last = l.completed_at;
+      const ci = CEFR.indexOf(l.cefr_overall || ''); if (ci >= 0) { m[k].cefrSum += ci; m[k].cefrN += 1; }
     });
-    return Object.values(m).sort((a, b) => b.cost - a.cost);
-  }, [langLessons]);
+    return Object.values(m).map((u) => ({ ...u, cefr: u.cefrN ? u.cefrSum / u.cefrN : -1 }));
+  }, [rangeLessons]);
 
-  const scoped = useMemo(() => (selectedUser ? langLessons.filter((l) => l.user_id === selectedUser.id) : langLessons), [langLessons, selectedUser]);
+  const sortedUsers = useMemo(() => {
+    const by = topSort === 'usage' ? (a: typeof users[number], b: typeof users[number]) => b.lessons - a.lessons
+      : topSort === 'cefr' ? (a: typeof users[number], b: typeof users[number]) => b.cefr - a.cefr || b.lessons - a.lessons
+        : (a: typeof users[number], b: typeof users[number]) => b.cost - a.cost;
+    return [...users].sort(by);
+  }, [users, topSort]);
+
+  const scoped = useMemo(() => (selectedUser ? rangeLessons.filter((l) => l.user_id === selectedUser.id) : rangeLessons), [rangeLessons, selectedUser]);
 
   const cefr = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -119,15 +148,14 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
         </div>
         <div className="font-mono text-sm text-gray-500 mb-3">{d.admin.rangeTotal}: <span className="font-bold text-emerald-600">${rangeTotal.toFixed(4)}</span> · {series.length} {granularity === 'day' ? 'day(s)' : 'month(s)'}</div>
         <div className="flex gap-3">
-          <div className="flex flex-col justify-between h-64 text-right text-xs font-mono text-gray-400 py-1 shrink-0 w-16">
-            <span>${costAxis.toFixed(2)}</span><span>${(costAxis / 2).toFixed(2)}</span><span>$0.00</span>
+          <div className="flex flex-col-reverse justify-between h-64 text-right text-xs font-mono text-gray-400 py-1 shrink-0 w-16">
+            {costScale.ticks.map((t) => <span key={t}>${t.toFixed(2)}</span>)}
           </div>
           <div className="flex-1 overflow-x-auto">
             <div className="min-w-[500px] h-64 flex items-end gap-1 border-l border-b border-gray-200 relative">
-              <div className="absolute left-0 right-0 top-0 border-t border-dashed border-gray-100"></div>
-              <div className="absolute left-0 right-0 top-1/2 border-t border-dashed border-gray-100"></div>
+              {costScale.ticks.map((t) => <div key={t} className="absolute left-0 right-0 border-t border-dashed border-gray-100" style={{ bottom: `${(t / costScale.max) * 100}%` }}></div>)}
               {series.map((b) => {
-                const h = costAxis > 0 ? (b.cost / costAxis) * 100 : 0;
+                const h = costScale.max > 0 ? (b.cost / costScale.max) * 100 : 0;
                 return (
                   <div key={b.key} className="flex-1 flex flex-col justify-end items-center h-full group relative">
                     <div className="w-full bg-gradient-to-t from-emerald-500 to-cyan-500 rounded-t hover:from-emerald-600 hover:to-cyan-600 transition-all cursor-pointer min-h-[2px] relative" style={{ height: `${h}%` }}>
@@ -155,21 +183,21 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
           </div>
         </div>
         <div className="flex gap-2">
-          <div className="flex flex-col justify-between h-56 text-right text-xs font-mono text-emerald-600 py-1 shrink-0 w-8"><span>{lessonsAxis}</span><span>{Math.round(lessonsAxis / 2)}</span><span>0</span></div>
+          <div className="flex flex-col-reverse justify-between h-56 text-right text-xs font-mono text-emerald-600 py-1 shrink-0 w-8">{lessonsScale.ticks.map((t) => <span key={t}>{t}</span>)}</div>
           <div className="flex-1 overflow-x-auto">
             <div className="min-w-[500px]">
               <div className="relative h-56 border-l border-r border-b border-gray-200">
                 <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
-                  <line x1="0" y1="50" x2="100" y2="50" stroke="#f3f4f6" strokeWidth="0.5" />
+                  {lessonsScale.ticks.map((t) => <line key={t} x1="0" y1={100 - (t / lessonsScale.max) * 100} x2="100" y2={100 - (t / lessonsScale.max) * 100} stroke="#f3f4f6" strokeWidth="0.5" />)}
                   {series.length > 1 && (
                     <>
-                      <polyline fill="none" stroke="#10b981" strokeWidth="2" vectorEffect="non-scaling-stroke" points={series.map((s, i) => `${xAt(i)},${100 - (s.lessons / lessonsAxis) * 100}`).join(' ')} />
-                      <polyline fill="none" stroke="#06b6d4" strokeWidth="2" vectorEffect="non-scaling-stroke" points={series.map((s, i) => `${xAt(i)},${100 - (s.users / usersAxis) * 100}`).join(' ')} />
+                      <polyline fill="none" stroke="#10b981" strokeWidth="2" vectorEffect="non-scaling-stroke" points={series.map((s, i) => `${xAt(i)},${100 - (s.lessons / lessonsScale.max) * 100}`).join(' ')} />
+                      <polyline fill="none" stroke="#06b6d4" strokeWidth="2" vectorEffect="non-scaling-stroke" points={series.map((s, i) => `${xAt(i)},${100 - (s.users / usersScale.max) * 100}`).join(' ')} />
                     </>
                   )}
                 </svg>
                 {series.map((s, i) => {
-                  const x = xAt(i); const yl = 100 - (s.lessons / lessonsAxis) * 100; const yu = 100 - (s.users / usersAxis) * 100;
+                  const x = xAt(i); const yl = 100 - (s.lessons / lessonsScale.max) * 100; const yu = 100 - (s.users / usersScale.max) * 100;
                   return (
                     <div key={s.key}>
                       <div className="absolute w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white shadow" style={{ left: `${x}%`, top: `${yl}%`, transform: 'translate(-50%,-50%)' }} title={`${s.lessons} lessons`} />
@@ -186,7 +214,7 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
               </div>
             </div>
           </div>
-          <div className="flex flex-col justify-between h-56 text-left text-xs font-mono text-cyan-600 py-1 shrink-0 w-8"><span>{usersAxis}</span><span>{Math.round(usersAxis / 2)}</span><span>0</span></div>
+          <div className="flex flex-col-reverse justify-between h-56 text-left text-xs font-mono text-cyan-600 py-1 shrink-0 w-8">{usersScale.ticks.map((t) => <span key={t}>{t}</span>)}</div>
         </div>
       </div>
 
@@ -200,19 +228,31 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
             <h2 className="text-xl font-bold font-mono"><span className="text-gray-400">// </span>top_users() <span className="text-gray-400 text-sm">[{users.length}]</span></h2>
             {selectedUser && <button onClick={() => setSelectedUser(null)} className="px-2.5 py-1 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition-all font-mono text-xs">✕ {d.admin.showAll}</button>}
           </div>
+          <div className="flex gap-1 mb-3">
+            <span className="font-mono text-xs text-gray-400 mr-1 self-center">by:</span>
+            {([['usage', 'usage'], ['cost', 'cost'], ['cefr', 'CEFR']] as const).map(([k, lbl]) => (
+              <button key={k} onClick={() => setTopSort(k)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${topSort === k ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{lbl}</button>
+            ))}
+          </div>
           <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-            {users.map((u, i) => (
+            {sortedUsers.map((u, i) => (
               <button key={u.user_id} onClick={() => setSelectedUser((cur) => (cur?.id === u.user_id ? null : { id: u.user_id, email: u.email }))} className={`w-full flex items-center justify-between p-3 rounded-lg text-left transition-all ${selectedUser?.id === u.user_id ? 'bg-emerald-50 ring-2 ring-emerald-400' : 'bg-white/50 hover:bg-white'}`} title={d.admin.clickFilter}>
                 <div className="flex items-center space-x-3 min-w-0">
                   <div className="w-8 h-8 shrink-0 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-mono text-sm font-bold">{i + 1}</div>
                   <div className="min-w-0">
                     <p className="font-mono text-sm text-gray-800 truncate">{u.email || `${u.user_id.slice(0, 8)}…`}</p>
-                    <p className="font-mono text-xs text-gray-500">{u.lessons} lessons · {u.tokens.toLocaleString()} tok · {Math.round(u.tokens / (u.lessons || 1)).toLocaleString()} tok/lesson</p>
+                    <p className="font-mono text-xs text-gray-500">{u.lessons} lessons · {u.tokens.toLocaleString()} tok · avg CEFR {u.cefr >= 0 ? CEFR[Math.floor(u.cefr)] : '—'}</p>
                     <p className="font-mono text-[10px] text-gray-400">last: {new Date(u.last).toLocaleDateString()}</p>
                   </div>
                 </div>
                 <div className="text-right shrink-0 pl-2">
-                  <p className="font-mono text-sm font-bold text-emerald-600">${u.cost.toFixed(2)}</p>
+                  {topSort === 'cefr' ? (
+                    <p className="font-mono text-lg font-bold gradient-text">{u.cefr >= 0 ? CEFR[Math.floor(u.cefr)] : '—'}</p>
+                  ) : topSort === 'usage' ? (
+                    <p className="font-mono text-lg font-bold text-emerald-600">{u.lessons}<span className="text-xs text-gray-400"> sess</span></p>
+                  ) : (
+                    <p className="font-mono text-sm font-bold text-emerald-600">${u.cost.toFixed(2)}</p>
+                  )}
                   <p className="font-mono text-xs text-gray-500">${(u.cost / (u.lessons || 1)).toFixed(4)}/lesson</p>
                 </div>
               </button>
