@@ -22,30 +22,69 @@ const EMAIL = process.env.E2E_EMAIL || 'spiko-e2e@example.com';
 const PASSWORD = process.env.E2E_PASSWORD || 'Test-e2e-Passw0rd!';
 const W = 1280, H = 720, FPS = 30, MAX_SECONDS = 50;
 const ASSETS = path.resolve('scratch-demo');
-const OUT = path.resolve('public/demo/demo-narrated.mp4');
 const FONT = 'font.ttf';
+
+// Which language demo to build:  node scripts/build-demo-video.mjs [en|fr|pt]
+const LANG = (process.argv[2] || process.env.DEMO_LANG || 'en').toLowerCase();
+const OUT = path.resolve(`public/demo/demo-${LANG}.mp4`);
+const POSTER = path.resolve(`public/demo/demo-${LANG}-poster.jpg`);
 
 // Narrator = warm Latin-American Spanish (natural Studio). Sarah (the AI
 // colleague) = a woman's English voice. You = a Latin voice speaking English
 // (Spanish accent) at a measured B2 pace, so the fluency matches the chosen
 // level and feels realistic.
 const ELEVEN_KEY = env.ELEVENLABS_API_KEY;
-const USER_VOICE_ID = process.env.DEMO_USER_VOICE_ID || env.DEMO_USER_VOICE_ID || 'NypX9UBqm1VQg8EJz4Q2';
+
+// Per-language demo config. Each language gets a DISTINCT scenario (role +
+// language) and a DISTINCT CEFR level, and uses the OWNER's own cloned voice
+// (recorded per language in ElevenLabs) for the learner turns. The AI colleague
+// speaks the scenario language with a natural Google voice (a different person).
+// Narration is always the same Latin-American Spanish voice-over.
+const LANGS = {
+  en: {
+    label: 'English', modal: /English/, level: 'B2', role: 'Backend Engineer', industry: 'TECH',
+    voiceId: env.DEMO_VOICE_ID_EN || 'NypX9UBqm1VQg8EJz4Q2',
+    ai: { languageCode: 'en-US', name: 'en-US-Studio-O', rate: 1.0, pitch: 0 }, // female English (Studio)
+    turns: [
+      "What's failing, and which service is affected?",
+      "Let me trace the logs — I'll add an index and a regression test.",
+    ],
+  },
+  fr: {
+    label: 'Français', modal: /Fran[cç]ais|French/, level: 'A2', role: 'Backend Engineer', industry: 'TECH',
+    voiceId: env.DEMO_VOICE_ID_FR || 'Xyk1BdokdMYgjKUWcBeC',
+    ai: { languageCode: 'fr-FR', name: 'fr-FR-Studio-A', rate: 1.0, pitch: 0 }, // female French (Studio)
+    turns: [ // simple A2 phrasing
+      "Quel service ne marche pas ? C’est grave ?",
+      "D’accord. Je regarde les logs et je corrige le problème.",
+    ],
+  },
+  pt: {
+    label: 'Português', modal: /Portugu[eê]s|Portuguese/, level: 'B1', role: 'Senior Analyst, Finance Business Partner', industry: 'FINANCE',
+    voiceId: env.DEMO_VOICE_ID_PT || '65eDZ1TeXBiKsM7pqBBi',
+    ai: { languageCode: 'pt-BR', name: 'pt-BR-Neural2-C', rate: 1.0, pitch: 0 }, // female Portuguese (Neural2 — no Studio tier)
+    turns: [ // finance business-partner scenario, simple B1 phrasing
+      "Qual é a diferença no orçamento deste mês?",
+      "Certo. Vou revisar os números e preparar a previsão.",
+    ],
+  },
+};
+const L = LANGS[LANG];
+if (!L) throw new Error(`Unknown lang '${LANG}' (use en|fr|pt)`);
+if (!L.voiceId) throw new Error(`No cloned voice id for ${LANG}; set DEMO_VOICE_ID_${LANG.toUpperCase()} in .env.local`);
+
 const VOICES = {
-  narrator: { languageCode: 'es-US', name: 'es-US-Studio-B', rate: 1.0, pitch: 0 },  // Latin Spanish, male, natural (Google)
-  ai:       { languageCode: 'en-US', name: 'en-US-Studio-O', rate: 1.0, pitch: 0 },  // Sarah — female English (Google)
-  user:     { provider: 'eleven', voiceId: USER_VOICE_ID },                          // the owner's cloned voice (ElevenLabs)
+  narrator: { languageCode: 'es-US', name: 'es-US-Studio-B', rate: 1.0, pitch: 0 },  // Latin Spanish voice-over (Google Studio)
+  ai:       L.ai,                                                                     // AI colleague, speaks the scenario language
+  user:     { provider: 'eleven', voiceId: L.voiceId },                              // the owner's cloned voice for this language
 };
 // The brand is spoken /spiːk eɪˈaɪ/ ("speak A-I"), never spelled out. Studio
 // voices ignore SSML <phoneme>, so we spell it phonetically for the Latin
 // Spanish narrator: "spik ei ái" → /spik eɪ ˈaɪ/.
 const BRAND = 'spik ei ái';
 
-// Keep it TIGHT — two short exchanges only.
-const USER_TURNS = [
-  "What's failing, and which service is affected?",
-  "Let me trace the logs — I'll add an index and a regression test.",
-];
+// Keep it TIGHT — two short exchanges only. Learner turns in the scenario language.
+const USER_TURNS = L.turns;
 // First sentence only, so the AI line stays short on screen and in audio.
 const firstSentence = (s) => {
   const m = String(s).replace(/\s+/g, ' ').trim().match(/^.*?[.!?](\s|$)/);
@@ -98,8 +137,9 @@ async function recentSessionId() {
   try {
     const REF = env.SUPABASE_PROJECT_REF, SBP = env.SUPABASE_ACCESS_TOKEN;
     const sql = (where) => `select lc.lesson_id from lesson_costs lc join profiles p on p.id=lc.user_id where p.email='${EMAIL}' and lc.scenario_type <> 'mock_seed' and lc.pronunciation_level is not null and lc.transcript is not null ${where} order by lc.completed_at desc limit 1`;
-    // A real, fully-graded session (has per-skill metrics + transcript), preferring a strong level.
-    for (const where of ["and lc.cefr_overall in ('B2','C1','C2')", '']) {
+    // A real, fully-graded session (per-skill metrics + transcript). Prefer one in
+    // THIS video's language first, then any strong session, then anything graded.
+    for (const where of [`and lc.language='${LANG}'`, "and lc.cefr_overall in ('B2','C1','C2')", '']) {
       const rows = await (await fetch(`https://api.supabase.com/v1/projects/${REF}/database/query`, { method: 'POST', headers: { Authorization: `Bearer ${SBP}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ query: sql(where) }) })).json();
       if (Array.isArray(rows) && rows[0]?.lesson_id) return rows[0].lesson_id;
     }
@@ -125,9 +165,9 @@ async function capture() {
 
   await page.getByRole('button', { name: /start_practice|start_first_practice/i }).first().click();
   const modal = page.locator('.max-w-lg'); await modal.waitFor({ state: 'visible', timeout: 10_000 });
-  await modal.getByRole('button', { name: /English/ }).click();
-  await modal.getByRole('button', { name: 'B2', exact: true }).click();
-  await modal.locator('select').selectOption({ label: 'Backend Engineer' }).catch(async () => {
+  await modal.getByRole('button', { name: L.modal }).click();
+  await modal.getByRole('button', { name: L.level, exact: true }).click();
+  await modal.locator('select').selectOption({ label: L.role }).catch(async () => {
     const opts = await modal.locator('select option').all(); if (opts.length > 1) await modal.locator('select').selectOption({ index: 1 });
   });
   await page.waitForTimeout(600); await shot('setup');
@@ -199,7 +239,7 @@ async function main() {
     { shot: 'landing', voice: 'narrator', say: '¿Quieres mejorar tus interacciones en una segunda lengua, pero sin el escenario genérico del restaurante o el aeropuerto?', cap: '' },
     { shot: 'landing', voice: 'narrator', say: `¿Necesitas practicar específicamente para tu labor diaria? Con ${BRAND}.`, cap: '' },
     { shot: 'setup', voice: 'narrator', say: 'Eliges tu idioma, tu nivel, y el puesto para el que te preparas.', cap: '' },
-    { shot: 'conv0', voice: 'narrator', say: 'La inteligencia artificial se convierte en tu colega Sarah, en un incidente real, y te habla.', cap: '' },
+    { shot: 'conv0', voice: 'narrator', say: 'La inteligencia artificial se convierte en tu colega, en un incidente real, y te habla.', cap: '' },
     { shot: 'conv0', voice: 'ai', say: firstSentence(cap.aiOpener), cap: firstSentence(cap.aiOpener), badge: 'speak' },
     { shot: 'user0', voice: 'user', say: USER_TURNS[0], cap: USER_TURNS[0], badge: 'rec' },
     { shot: 'ai0', voice: 'ai', say: firstSentence(cap.aiReplies[0] || 'Let me check that.'), cap: firstSentence(cap.aiReplies[0] || 'Let me check that.'), badge: 'speak' },
@@ -252,10 +292,12 @@ async function main() {
   const streams = segList.map((i) => `[${i}:v][${i}:a]`).join('');
   const catFilter = `${streams}concat=n=${segList.length}:v=1:a=1[v][a]`;
   const cat = ffCwd(['-y', ...inputs, '-filter_complex', catFilter, '-map', '[v]', '-map', '[a]',
-    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', 'demo-narrated.mp4']);
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', 'out.mp4']);
   if (cat.status !== 0) { console.error(cat.stderr.split('\n').slice(-8).join('\n')); throw new Error('concat fail'); }
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.copyFileSync(path.join(ASSETS, 'demo-narrated.mp4'), OUT);
-  console.log(`✓ done → ${OUT} (${(fs.statSync(OUT).size / 1e6).toFixed(1)} MB, ${durationOf(OUT).toFixed(0)}s)`);
+  fs.copyFileSync(path.join(ASSETS, 'out.mp4'), OUT);
+  // Poster: a clean frame ~2s in (past the fade-in).
+  ffCwd(['-y', '-ss', '2', '-i', 'out.mp4', '-frames:v', '1', '-q:v', '3', POSTER]);
+  console.log(`✓ done [${LANG}] → ${OUT} (${(fs.statSync(OUT).size / 1e6).toFixed(1)} MB, ${durationOf(OUT).toFixed(0)}s)  + poster`);
 }
 main().catch((e) => { console.error('ERR', e); process.exit(1); });

@@ -14,10 +14,19 @@ const PLAN_META = [
   { price: 299, popular: false },
 ];
 
+// Demo videos — one per language, each a DISTINCT scenario (level + industry).
+// Selector label: language · CEFR level · industry.
+const DEMOS = [
+  { code: 'en', label: 'EN', level: 'B2', industry: 'TECH' },
+  { code: 'fr', label: 'FR', level: 'A2', industry: 'TECH' },
+  { code: 'pt', label: 'PT', level: 'B1', industry: 'FINANCE' },
+];
+
 export default function Home() {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [demoLang, setDemoLang] = useState('en');
   const { d } = useUi();
   
   useEffect(() => {
@@ -226,12 +235,29 @@ export default function Home() {
           <h2 className="text-3xl md:text-4xl font-bold font-mono mb-3">
             <span className="text-gray-400">// </span><span className="gradient-text">demo.run()</span>
           </h2>
-          <p className="text-gray-600 font-mono text-sm mb-8">
+          <p className="text-gray-600 font-mono text-sm mb-6">
             <span className="text-gray-400">// </span>una práctica real, de principio a fin
           </p>
+          {/* Language · level · industry selector */}
+          <div className="flex flex-wrap justify-center gap-2 mb-6">
+            {DEMOS.map((dm) => (
+              <button
+                key={dm.code}
+                onClick={() => setDemoLang(dm.code)}
+                className={`px-4 py-2 rounded-xl font-mono text-sm transition-all border ${
+                  demoLang === dm.code
+                    ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white border-transparent shadow'
+                    : 'bg-white/70 text-gray-600 border-gray-200 hover:bg-white'
+                }`}
+              >
+                <span className="font-bold">{dm.label}</span>
+                <span className={demoLang === dm.code ? 'text-white/80' : 'text-gray-400'}> · {dm.level} · {dm.industry}</span>
+              </button>
+            ))}
+          </div>
           <div className="rounded-2xl overflow-hidden shadow-2xl border border-gray-200/50 glass">
-            <video className="w-full block" controls playsInline preload="metadata" poster="/demo/demo-poster.jpg">
-              <source src="/demo/demo-narrated.mp4" type="video/mp4" />
+            <video key={demoLang} className="w-full block" controls playsInline preload="metadata" poster={`/demo/demo-${demoLang}-poster.jpg`}>
+              <source src={`/demo/demo-${demoLang}.mp4`} type="video/mp4" />
             </video>
           </div>
           <div className="mt-8">
