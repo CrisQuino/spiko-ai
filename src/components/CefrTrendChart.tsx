@@ -26,20 +26,27 @@ const monthKey = (s: string) => { const d = new Date(s); return `${d.getFullYear
 const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 
 export default function CefrTrendChart({
-  lessons, granularity: gProp = 'day', rangeStart: rsProp, rangeEnd: reProp, standalone = false,
-}: { lessons: Row[]; granularity?: 'day' | 'month'; rangeStart?: string; rangeEnd?: string; standalone?: boolean }) {
-  // Own controls only in standalone mode.
+  lessons, granularity: gProp = 'day', rangeStart: rsProp, rangeEnd: reProp, controls = 'none',
+}: { lessons: Row[]; granularity?: 'day' | 'month'; rangeStart?: string; rangeEnd?: string; controls?: 'full' | 'granularity' | 'none' }) {
+  // Which controls this chart owns:
+  //  full        — owns language + granularity + date-range (self-contained).
+  //  granularity — owns only day/month; language + range come from the page's
+  //                global filter (parent pre-filters lessons by language).
+  //  none        — owns nothing; everything is driven by props (group dashboards).
+  const ownsLang = controls === 'full';
+  const ownsGranularity = controls === 'full' || controls === 'granularity';
+  const ownsRange = controls === 'full';
   const [lang, setLang] = useState<Lang>('global');
   const [gState, setGState] = useState<'day' | 'month'>('day');
   const [rsState, setRsState] = useState<string>(() => daysAgo(30));
   const [reState, setReState] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
-  const granularity = standalone ? gState : gProp;
-  const rangeStart = standalone ? rsState : rsProp;
-  const rangeEnd = standalone ? reState : reProp;
+  const granularity = ownsGranularity ? gState : gProp;
+  const rangeStart = ownsRange ? rsState : rsProp;
+  const rangeEnd = ownsRange ? reState : reProp;
   const rows = useMemo(
-    () => (standalone && lang !== 'global' ? lessons.filter((l) => l.language === lang) : lessons),
-    [lessons, standalone, lang],
+    () => (ownsLang && lang !== 'global' ? lessons.filter((l) => l.language === lang) : lessons),
+    [lessons, ownsLang, lang],
   );
 
   const series = useMemo(() => {
@@ -74,21 +81,21 @@ export default function CefrTrendChart({
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <h2 className="text-xl font-bold font-mono"><span className="text-gray-400">// </span>cefr_progress()</h2>
         <div className="flex items-center gap-3 flex-wrap">
-          {standalone && (
-            <>
-              <div className="flex gap-1 items-center">
-                <span className="font-mono text-xs text-gray-400 mr-1">Filter:</span>
-                {(['global', 'en', 'fr', 'pt'] as const).map((opt) => (
-                  <button key={opt} onClick={() => setLang(opt)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${lang === opt ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{opt === 'global' ? 'Global' : opt.toUpperCase()}</button>
-                ))}
-              </div>
-              <div className="flex gap-1">{gBtn('day')}{gBtn('month')}</div>
-              <div className="flex items-center gap-1 font-mono text-xs text-gray-600">
-                <input type="date" value={rsState} max={reState} onChange={(e) => setRsState(e.target.value)} className="bg-white/70 border border-gray-200 rounded-md px-2 py-1" />
-                <span>→</span>
-                <input type="date" value={reState} min={rsState} onChange={(e) => setReState(e.target.value)} className="bg-white/70 border border-gray-200 rounded-md px-2 py-1" />
-              </div>
-            </>
+          {ownsLang && (
+            <div className="flex gap-1 items-center">
+              <span className="font-mono text-xs text-gray-400 mr-1">Filter:</span>
+              {(['global', 'en', 'fr', 'pt'] as const).map((opt) => (
+                <button key={opt} onClick={() => setLang(opt)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${lang === opt ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{opt === 'global' ? 'Global' : opt.toUpperCase()}</button>
+              ))}
+            </div>
+          )}
+          {ownsGranularity && <div className="flex gap-1">{gBtn('day')}{gBtn('month')}</div>}
+          {ownsRange && (
+            <div className="flex items-center gap-1 font-mono text-xs text-gray-600">
+              <input type="date" value={rsState} max={reState} onChange={(e) => setRsState(e.target.value)} className="bg-white/70 border border-gray-200 rounded-md px-2 py-1" />
+              <span>→</span>
+              <input type="date" value={reState} min={rsState} onChange={(e) => setReState(e.target.value)} className="bg-white/70 border border-gray-200 rounded-md px-2 py-1" />
+            </div>
           )}
           <div className="flex items-center gap-4 font-mono text-xs">
             <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>assessed</span>
