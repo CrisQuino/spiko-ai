@@ -589,8 +589,9 @@ function SuperAdminPanel() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', allowed_email_domain: '', max_users: '5', daily_practice_limit: '', monthly_practice_limit: '', max_jds_per_user: '' });
   const [banQuery, setBanQuery] = useState('');
-  const [b2cUsers, setB2cUsers] = useState<{ id: string; email: string; full_name: string | null; banned: boolean }[] | null>(null);
+  const [b2cUsers, setB2cUsers] = useState<{ id: string; email: string; full_name: string | null; plan: string; company: string | null; company_id: string | null; banned: boolean }[] | null>(null);
   const [b2cLoading, setB2cLoading] = useState(false);
+  const [highlightMember, setHighlightMember] = useState<string | null>(null);
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
 
@@ -649,6 +650,7 @@ function SuperAdminPanel() {
   };
 
   const toggleDetail = async (id: string) => {
+    setHighlightMember(null); // manual toggling clears any jump highlight
     if (openId === id) { setOpenId(null); return; }
     setOpenId(id);
     if (!detail[id]) {
@@ -687,17 +689,40 @@ function SuperAdminPanel() {
     if (r.status === 200) { flash(`✓ ${m.email} removed from company`); refreshDetail(id); loadAll(); }
     else flash(`✕ ${r.body?.error || 'error'}`);
   };
-  const searchB2c = async () => {
+  const searchUsers = async (query: string) => {
     setB2cLoading(true);
-    const r = await api('list_b2c_users', { search: banQuery.trim() });
+    const r = await api('list_users', { search: query.trim() });
     setB2cLoading(false);
     if (r.status === 200) setB2cUsers(r.body.users || []);
     else flash(`✕ ${r.body?.error || 'error'}`);
   };
+  // Live, debounced search — filters as you type; also loads the full list initially.
+  useEffect(() => {
+    if (!token) return;
+    const t = setTimeout(() => searchUsers(banQuery), 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [banQuery, token]);
   const banById = async (u: { id: string; email: string }, banned: boolean) => {
     const r = await api('ban_user', { user_id: u.id, banned });
-    if (r.status === 200) { flash(banned ? `✓ ${u.email} banned (cannot log in)` : `✓ ${u.email} unbanned`); searchB2c(); }
+    if (r.status === 200) { flash(banned ? `✓ ${u.email} banned (cannot log in)` : `✓ ${u.email} unbanned`); searchUsers(banQuery); }
     else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+  const deleteUserAcct = async (u: { id: string; email: string }) => {
+    if (!window.confirm(`Delete ${u.email}? This permanently removes the account AND its lesson history — a hard reset (their monthly free sessions reset). This cannot be undone.`)) return;
+    const r = await api('delete_user', { user_id: u.id });
+    if (r.status === 200) { flash(`✓ ${u.email} deleted`); searchUsers(banQuery); }
+    else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+  // Jump from an account row to that member inside their company panel: expand
+  // the company, load its members, highlight the row, and scroll it into view.
+  const goToCompany = async (companyId: string, userId: string) => {
+    setOpenId(companyId);
+    if (!detail[companyId]) await refreshDetail(companyId);
+    setHighlightMember(userId); // persists until another jump or the panel is toggled
+    setTimeout(() => {
+      document.getElementById(`company-${companyId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
   };
   const setMemberRole = async (id: string, m: Member, role: 'manager' | 'employee') => {
     const r = await api('set_member_role', { user_id: m.id, role });
@@ -776,7 +801,7 @@ function SuperAdminPanel() {
 
       <div className="space-y-2">
         {companies.map((c) => (
-          <div key={c.id} className="rounded-xl bg-white/50 border border-gray-200">
+          <div key={c.id} id={`company-${c.id}`} className="rounded-xl bg-white/50 border border-gray-200">
             <button onClick={() => toggleDetail(c.id)} className="w-full flex items-center justify-between p-4 text-left hover:bg-white/70 transition-all">
               <div className="min-w-0">
                 <p className="font-mono text-sm text-gray-800 truncate">
@@ -803,6 +828,7 @@ function SuperAdminPanel() {
                 onSetRole={setMemberRole}
                 api={api}
                 flash={flash}
+                highlightMember={highlightMember}
               />
             )}
           </div>
@@ -810,31 +836,45 @@ function SuperAdminPanel() {
         {companies.length === 0 && <p className="text-center text-gray-500 font-mono text-sm py-8">// no_companies_yet</p>}
       </div>
 
-      {/* B2C account access — search a B2C user, then toggle their login access */}
+      {/* Account access — search ANY user (corporate or B2C) and toggle their login */}
       <div className="mt-8 pt-6 border-t border-gray-200">
-        <h3 className="font-mono text-sm text-gray-500 mb-1">account_access() <span className="text-gray-400">— ban or unban an individual (B2C) login</span></h3>
-        <p className="font-mono text-xs text-gray-400 mb-3">Search a B2C (non-corporate) user, then toggle their access. A banned user cannot log in at all — reversible.</p>
-        <div className="flex flex-wrap gap-2 items-center">
+        <h3 className="font-mono text-sm text-gray-500 mb-1">account_access() <span className="text-gray-400">— B2C login control (ban / delete)</span></h3>
+        <p className="font-mono text-xs text-gray-400 mb-3">Type to filter. B2C users can be banned (reversible) or deleted (hard reset — clears their lesson history). Corporate members are shown for lookup only (blue) and managed from their company panel.</p>
+        <div className="flex items-center gap-2">
           <input
-            value={banQuery} onChange={(e) => setBanQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && searchB2c()}
-            placeholder="search by email… (blank = list all B2C users)"
+            value={banQuery} onChange={(e) => setBanQuery(e.target.value)}
+            placeholder="type to search by email… (blank = all users)"
             className="flex-1 min-w-[220px] bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm"
           />
-          <button onClick={searchB2c} disabled={b2cLoading} className="px-3 py-2 rounded-md bg-gray-800 text-white hover:bg-gray-700 font-mono text-xs disabled:opacity-50">{b2cLoading ? 'searching…' : 'search()'}</button>
+          <span className="font-mono text-xs text-gray-400 shrink-0">{b2cLoading ? 'searching…' : b2cUsers ? `${b2cUsers.length} shown` : ''}</span>
         </div>
         {b2cUsers && (
           <div className="mt-3 max-h-64 overflow-y-auto space-y-1 pr-1">
-            {b2cUsers.length === 0 && <p className="font-mono text-xs text-gray-400">// no_b2c_users_match</p>}
+            {b2cUsers.length === 0 && <p className="font-mono text-xs text-gray-400">// no_users_match</p>}
             {b2cUsers.map((u) => (
-              <div key={u.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-white/60 font-mono text-xs">
+              <div key={u.id} className={`flex items-center justify-between gap-2 px-3 py-2 rounded-md font-mono text-xs ${u.company ? 'bg-indigo-50' : 'bg-white/60'}`}>
                 <span className="truncate min-w-0">
                   {u.email}
+                  {u.company ? (
+                    <span className="ml-2 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">in {u.company}</span>
+                  ) : (
+                    <span className="ml-2 px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{u.plan || 'b2c'}</span>
+                  )}
                   {u.banned && <span className="ml-2 px-1.5 py-0.5 rounded bg-red-100 text-red-700">banned</span>}
                 </span>
-                {u.banned ? (
-                  <button onClick={() => banById(u, false)} className="px-2 py-1 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200 shrink-0">unban()</button>
+                {u.company ? (
+                  <button onClick={() => u.company_id && goToCompany(u.company_id, u.id)} className="text-indigo-600 hover:text-indigo-800 hover:underline shrink-0" title={`Open ${u.company} and highlight this member`}>
+                    manage in {u.company} →
+                  </button>
                 ) : (
-                  <button onClick={() => banById(u, true)} className="px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 shrink-0">ban()</button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {u.banned ? (
+                      <button onClick={() => banById(u, false)} className="px-2 py-1 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200">unban()</button>
+                    ) : (
+                      <button onClick={() => banById(u, true)} className="px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200">ban()</button>
+                    )}
+                    <button onClick={() => deleteUserAcct(u)} className="px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200">delete()</button>
+                  </div>
                 )}
               </div>
             ))}
@@ -854,14 +894,14 @@ function Field({ label, value, onChange, placeholder, type = 'text' }: { label: 
   );
 }
 
-function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite, onRemove, onSetRole, api, flash }: {
+function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite, onRemove, onSetRole, api, flash, highlightMember }: {
   c: Company; detail?: { members: Member[]; pending: Pending[] }; busy: boolean;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   onSuspend: (c: Company) => void; onDelete: (c: Company) => void;
   onInvite: (id: string, email: string, reset: () => void) => void;
   onRemove: (id: string, m: Member) => void;
   onSetRole: (id: string, m: Member, role: 'manager' | 'employee') => void;
-  api: ApiFn; flash: (m: string) => void;
+  api: ApiFn; flash: (m: string) => void; highlightMember?: string | null;
 }) {
   const [limits, setLimits] = useState({
     max_users: String(c.max_users ?? ''),
@@ -982,7 +1022,7 @@ function CompanyDetail({ c, detail, busy, onPatch, onSuspend, onDelete, onInvite
         ) : (
           <div className="space-y-1">
             {detail.members.map((m) => (
-              <div key={m.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-white/60 font-mono text-xs">
+              <div key={m.id} className={`flex items-center justify-between gap-2 px-3 py-2 rounded-md font-mono text-xs transition-all ${highlightMember === m.id ? 'bg-amber-100 ring-2 ring-amber-400' : 'bg-white/60'}`}>
                 <span className="truncate min-w-0">
                   {m.email || `${m.id.slice(0, 8)}…`}
                   <span className={`ml-2 px-1.5 py-0.5 rounded ${m.role === 'manager' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-400'}`}>{m.role}</span>
