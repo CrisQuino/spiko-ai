@@ -138,11 +138,25 @@ export async function POST(request: NextRequest) {
         if (error) throw error;
         return NextResponse.json({ ok: true, banned: !!banned });
       }
-      case 'list_b2c_users': {
-        // Individual (non-corporate) users for the ban/unban picker, annotated
-        // with their current ban state. Search is a case-insensitive email match.
+      case 'delete_user': {
+        // Hard reset of a B2C individual: fully delete the account (cascades the
+        // profile + lesson history, so their monthly free-session count resets).
+        // Guarded to non-corporate accounts — corporate members are managed from
+        // their company panel.
+        const { user_id } = body as { user_id?: string };
+        if (!user_id) return NextResponse.json({ error: 'user_id required' }, { status: 400 });
+        const { data: prof } = await db.from('profiles').select('company_id').eq('id', user_id).maybeSingle();
+        if (prof?.company_id) return NextResponse.json({ error: 'user_is_corporate' }, { status: 409 });
+        const { error } = await db.auth.admin.deleteUser(user_id);
+        if (error) throw error;
+        return NextResponse.json({ ok: true });
+      }
+      case 'list_users': {
+        // All users for the ban/unban picker (login access applies to anyone,
+        // corporate or B2C), annotated with ban state, plan, and company name.
+        // Case-insensitive email search; capped for the picker.
         const { search } = body as { search?: string };
-        let q = db.from('profiles').select('id, email, full_name').is('company_id', null).order('email').limit(50);
+        let q = db.from('profiles').select('id, email, full_name, plan, company_id, companies(name)').order('email').limit(100);
         if (search?.trim()) q = q.ilike('email', `%${search.trim()}%`);
         const { data: profs } = await q;
         // Map ban state from Auth (paginated; covers current scale).
@@ -152,7 +166,11 @@ export async function POST(request: NextRequest) {
           const bu = (u as any).banned_until as string | null | undefined;
           banMap.set(u.id, !!bu && new Date(bu) > new Date());
         }
-        const users = (profs || []).map((p: any) => ({ id: p.id, email: p.email, full_name: p.full_name, banned: banMap.get(p.id) || false }));
+        const users = (profs || []).map((p: any) => ({
+          id: p.id, email: p.email, full_name: p.full_name, plan: p.plan,
+          company: p.companies?.name || null, company_id: p.company_id || null,
+          banned: banMap.get(p.id) || false,
+        }));
         return NextResponse.json({ users });
       }
       case 'list_company_jds': {

@@ -108,6 +108,12 @@ async function main() {
   await setProfile(userId, USER_EMAIL, { company_id: companyId, plan: 'corporate' });
   const teamStatus = async (tok) => (await fetch(`${BASE}/api/team`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` }, body: JSON.stringify({ action: 'overview' }) })).status;
 
+  // 7b) list_users lists ALL accounts, annotating a corporate member with their company
+  {
+    const users = await api('list_users', { search: 'p2-user' }, adminTok);
+    check('7b list_users shows corporate member with company label', users.status === 200 && (users.body.users || []).some((u) => u.id === userId && u.company === 'Phase2 Co'), '');
+  }
+
   // 8) domain_mode='manager' → promoting a member derives the invite domain from their email + grants team access
   {
     await api('update_company', { id: companyId, patch: { domain_mode: 'manager' } }, adminTok);
@@ -145,10 +151,23 @@ async function main() {
   {
     const r = await api('remove_from_company', { user_id: userId }, adminTok);
     const prof = (await dbRow(`/rest/v1/profiles?select=company_id,plan,role&id=eq.${userId}`))[0];
-    const b2c = await api('list_b2c_users', { search: 'p2-user' }, adminTok);
-    check('11 remove_from_company → free individual + in B2C list',
+    const users = await api('list_users', { search: 'p2-user' }, adminTok);
+    check('11 remove_from_company → free individual + in users list',
       r.status === 200 && prof.company_id === null && prof.plan === 'free' &&
-      (b2c.body.users || []).some((u) => u.id === userId && u.banned === false), JSON.stringify(prof));
+      (users.body.users || []).some((u) => u.id === userId && u.banned === false && u.company === null), JSON.stringify(prof));
+  }
+  // 11b) delete_user hard-resets a B2C account; corporate members are protected
+  {
+    const delEmail = 'p2-del@spiko-test.example';
+    const delId = await ensureUser(delEmail); await setProfile(delId, delEmail, { company_id: null, plan: 'free' });
+    const corpEmail = 'p2-corp@spiko-test.example';
+    const corpId = await ensureUser(corpEmail); await setProfile(corpId, corpEmail, { company_id: companyId, plan: 'corporate' });
+    const blocked = await api('delete_user', { user_id: corpId }, adminTok);
+    const del = await api('delete_user', { user_id: delId }, adminTok);
+    const gone = await dbRow(`/rest/v1/profiles?select=id&id=eq.${delId}`);
+    check('11b delete_user (B2C hard reset; corporate protected)',
+      blocked.status === 409 && blocked.body.error === 'user_is_corporate' && del.status === 200 && gone.length === 0,
+      `corp=${blocked.status}:${blocked.body.error} del=${del.status} gone=${gone.length}`);
   }
 
   // 12) suspend company
