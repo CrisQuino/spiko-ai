@@ -124,6 +124,26 @@ export async function POST(request: NextRequest) {
         await db.from('job_descriptions').delete().eq('id', id).eq('company_id', companyId).eq('visibility', 'company');
         return NextResponse.json({ ok: true });
       }
+      case 'list_member_jds': {
+        // Personal JDs by this company's members — candidates to promote team-wide.
+        const { data: members } = await db.from('profiles').select('id, email').eq('company_id', companyId);
+        const ids = (members || []).map((m: any) => m.id);
+        if (!ids.length) return NextResponse.json({ jds: [] });
+        const emap = new Map((members || []).map((m: any) => [m.id, m.email]));
+        const { data } = await db.from('job_descriptions').select('id, title, user_id, created_at').in('user_id', ids).eq('visibility', 'personal').order('created_at', { ascending: false });
+        const jds = (data || []).map((j: any) => ({ id: j.id, title: j.title, owner_email: emap.get(j.user_id) || null, created_at: j.created_at }));
+        return NextResponse.json({ jds });
+      }
+      case 'promote_jd': {
+        // Promote a member's personal JD to a team-wide company JD (own company only).
+        const { id } = body;
+        const { data: jd } = await db.from('job_descriptions').select('user_id').eq('id', id).single();
+        if (!jd) return NextResponse.json({ error: 'jd_not_found' }, { status: 404 });
+        const { data: owner } = await db.from('profiles').select('company_id').eq('id', jd.user_id).single();
+        if (!owner || owner.company_id !== companyId) return NextResponse.json({ error: 'not_in_team' }, { status: 403 });
+        await db.from('job_descriptions').update({ visibility: 'company', company_id: companyId }).eq('id', id);
+        return NextResponse.json({ ok: true });
+      }
 
       case 'invite_member': {
         const email = String(body.email || '').trim().toLowerCase();

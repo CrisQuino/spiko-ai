@@ -244,9 +244,9 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
           <h2 className="text-xl font-bold font-mono"><span className="text-gray-400">// </span>recent_lessons()</h2>
           {selectedUser && <span className="font-mono text-xs px-2 py-1 rounded-md bg-emerald-100 text-emerald-700">filtered: {selectedUser.email || `${selectedUser.id.slice(0, 8)}…`}</span>}
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-96 rounded-lg border border-gray-100">
           <table className="w-full">
-            <thead>
+            <thead className="sticky top-0 bg-white/95 backdrop-blur z-10">
               <tr className="border-b border-gray-300">
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">{d.admin.date}</th>
                 <th className="text-left py-3 px-4 font-mono text-sm text-gray-600">{d.admin.user}</th>

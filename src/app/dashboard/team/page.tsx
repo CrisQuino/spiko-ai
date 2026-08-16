@@ -32,6 +32,7 @@ export default function TeamDashboardPage() {
   const [ov, setOv] = useState<Overview | null>(null);
   const [lessons, setLessons] = useState<AdminLesson[]>([]);
   const [jds, setJds] = useState<CompanyJd[]>([]);
+  const [memberJds, setMemberJds] = useState<{ id: string; title: string; owner_email: string | null; created_at: string }[]>([]);
   const [selfId, setSelfId] = useState('');
 
   const [showInvite, setShowInvite] = useState(false);
@@ -57,11 +58,12 @@ export default function TeamDashboardPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push('/auth/login'); return; }
     setSelfId(user.id);
-    const [o, a, j] = await Promise.all([teamApi('overview'), teamApi('analytics'), teamApi('list_company_jds')]);
+    const [o, a, j, mj] = await Promise.all([teamApi('overview'), teamApi('analytics'), teamApi('list_company_jds'), teamApi('list_member_jds')]);
     if (o.status === 403) { router.push('/dashboard'); return; }
     if (o.status === 200) setOv(o.body);
     if (a.status === 200) setLessons(a.body.lessons || []);
     if (j.status === 200) setJds(j.body.jds || []);
+    if (mj.status === 200) setMemberJds(mj.body.jds || []);
     setLoading(false);
   }, [router, teamApi]);
 
@@ -109,6 +111,10 @@ export default function TeamDashboardPage() {
     if (!window.confirm('Delete this company JD? The whole team loses access to it.')) return;
     const r = await teamApi('delete_company_jd', { id });
     if (r.status === 200) { flash('✅ JD deleted'); setJdModal(null); load(); }
+  };
+  const promoteJd = async (id: string) => {
+    const r = await teamApi('promote_jd', { id });
+    if (r.status === 200) { flash('✅ JD promoted — now shared with the whole team'); load(); } else flash('❌ ' + (r.body?.error || 'error'));
   };
 
   if (loading) {
@@ -196,6 +202,23 @@ export default function TeamDashboardPage() {
                     <span className="truncate min-w-0">{j.title}</span>
                     <span className="text-gray-400 shrink-0">{new Date(j.created_at).toLocaleDateString()} · edit ›</span>
                   </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Members' personal JDs — promote to the whole team */}
+          <div>
+            <h3 className="font-mono text-sm text-gray-500 mb-2">member_jds() [{memberJds.length}] <span className="text-gray-400">— members&apos; personal JDs; promote one to share with the whole team</span></h3>
+            {memberJds.length === 0 ? (
+              <p className="font-mono text-xs text-gray-400">// no personal member JDs</p>
+            ) : (
+              <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                {memberJds.map((j) => (
+                  <div key={j.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-white/60 font-mono text-xs">
+                    <span className="truncate min-w-0">{j.title} <span className="text-gray-400">· {j.owner_email}</span></span>
+                    <button onClick={() => promoteJd(j.id)} className="px-2 py-1 rounded bg-indigo-100 text-indigo-700 hover:bg-indigo-200 shrink-0" title="Make this a team-wide company JD">promote_to_team()</button>
+                  </div>
                 ))}
               </div>
             )}
