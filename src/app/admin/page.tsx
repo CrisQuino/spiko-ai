@@ -120,7 +120,7 @@ type Company = {
 };
 type Member = { id: string; email: string | null; full_name: string | null; role: string; status: string };
 type Pending = { id: string; email: string; role: string; status: string; expires_at: string };
-type Settings = { free_monthly_sessions: number; free_max_jds: number; premium_max_jds: number };
+type Settings = { free_monthly_sessions: number; free_max_jds: number; premium_max_jds: number; margin_pct: number };
 type CompanyJd = { id: string; title: string; content: string; created_at: string };
 type ApiFn = (action: string, params?: Record<string, unknown>) => Promise<{ status: number; body: any }>;
 
@@ -131,7 +131,7 @@ function SuperAdminPanel() {
   const [token, setToken] = useState<string | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [sDraft, setSDraft] = useState({ free_monthly_sessions: '', free_max_jds: '', premium_max_jds: '' });
+  const [sDraft, setSDraft] = useState({ free_monthly_sessions: '', free_max_jds: '', premium_max_jds: '', margin_pct: '' });
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, { members: Member[]; pending: Pending[] }>>({});
   const [msg, setMsg] = useState('');
@@ -166,6 +166,7 @@ function SuperAdminPanel() {
         free_monthly_sessions: String(s.body.settings.free_monthly_sessions ?? ''),
         free_max_jds: String(s.body.settings.free_max_jds ?? ''),
         premium_max_jds: String(s.body.settings.premium_max_jds ?? ''),
+        margin_pct: String(s.body.settings.margin_pct ?? ''),
       });
     }
     if (c.body?.companies) setCompanies(c.body.companies);
@@ -296,11 +297,12 @@ function SuperAdminPanel() {
       {/* Platform settings */}
       <div className="mb-8">
         <h3 className="font-mono text-sm text-gray-500 mb-3">platform_settings()</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           {([
             ['free_monthly_sessions', 'Free sessions / month'],
             ['free_max_jds', 'Free max JDs'],
             ['premium_max_jds', 'Premium max JDs'],
+            ['margin_pct', 'Margin % (team price)'],
           ] as const).map(([k, label]) => (
             <label key={k} className="block">
               <span className="font-mono text-xs text-gray-500">{label}</span>
@@ -319,7 +321,7 @@ function SuperAdminPanel() {
           </button>
           {settings && (
             <span className="font-mono text-xs text-gray-400">
-              live: {settings.free_monthly_sessions}/mo · {settings.free_max_jds} free JDs · {settings.premium_max_jds} premium JDs
+              live: {settings.free_monthly_sessions}/mo · {settings.free_max_jds} free JDs · {settings.premium_max_jds} premium JDs · {settings.margin_pct}% margin
             </span>
           )}
         </div>
