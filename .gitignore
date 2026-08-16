@@ -45,3 +45,4 @@ next-env.d.ts
 coverage-report.html
 test-results/
 playwright-report/
+scratch-demo/
