@@ -47,6 +47,7 @@ export type Conversation = {
   technical_score: number | null;
   communication_score: number | null;
   overall_score: number | null;
+  language: string;
   created_at: string;
   updated_at: string;
 };
@@ -159,6 +160,7 @@ function mapLessonToConversation(l: any): Conversation {
     technical_score: null,
     communication_score: null,
     overall_score: overall,
+    language: l.language || 'unknown',
     created_at: l.created_at,
     updated_at: l.updated_at,
   };

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, getUserProfile, getUserConversations, getUserStats, getUserCefrLessons, type Profile, type Conversation, type UserStats, type CefrLesson } from '@/lib/supabase';
+import { supabase, getUserProfile, getUserConversations, getUserCefrLessons, type Profile, type Conversation, type CefrLesson } from '@/lib/supabase';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import PracticeSetup from '@/components/PracticeSetup';
@@ -15,13 +15,42 @@ export default function DashboardPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [stats, setStats] = useState<UserStats | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isUserAdmin, setIsUserAdmin] = useState(false);
   const [isManager, setIsManager] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
   const [setupOpen, setSetupOpen] = useState(false);
   const [cefrLessons, setCefrLessons] = useState<CefrLesson[]>([]);
+  // Global filters — drive the KPI cards, recent_conversations AND the CEFR chart.
+  const [fLang, setFLang] = useState<'global' | 'en' | 'fr' | 'pt'>('global');
+  const [rangeStart, setRangeStart] = useState<string>('');
+  const [rangeEnd, setRangeEnd] = useState<string>(() => new Date().toISOString().slice(0, 10));
+
+  const inRange = (s?: string | null) => {
+    if (!s) return true;
+    const k = s.slice(0, 10);
+    return (!rangeStart || k >= rangeStart) && (!rangeEnd || k <= rangeEnd);
+  };
+  const filteredConversations = useMemo(
+    () => conversations.filter((c) => (fLang === 'global' || c.language === fLang) && inRange(c.started_at)),
+    [conversations, fLang, rangeStart, rangeEnd],
+  );
+  // KPI cards recomputed from the filtered set (same math as getUserStats).
+  const fStats = useMemo(() => {
+    const completed = filteredConversations.filter((c) => c.status === 'completed');
+    const totalScore = completed.reduce((s, c) => s + (c.overall_score || 0), 0);
+    const totalTime = filteredConversations.reduce((s, c) => s + (c.duration_seconds || 0), 0);
+    return {
+      totalConversations: filteredConversations.length,
+      averageScore: completed.length ? Math.round(totalScore / completed.length) : 0,
+      totalTimeMinutes: Math.round(totalTime / 60),
+      lastActivity: filteredConversations.length ? filteredConversations[0].started_at : null,
+    };
+  }, [filteredConversations]);
+  const cefrForChart = useMemo(
+    () => (fLang === 'global' ? cefrLessons : cefrLessons.filter((l) => l.language === fLang)),
+    [cefrLessons, fLang],
+  );
 
   useEffect(() => {
     // Check for error messages from redirect
@@ -73,16 +102,21 @@ export default function DashboardPage() {
         userProfile.full_name = displayName;
       }
 
-      const [userStats, userConversations, userCefr] = await Promise.all([
-        getUserStats(user.id),
+      const [userConversations, userCefr] = await Promise.all([
         getUserConversations(user.id),
         getUserCefrLessons(user.id),
       ]);
 
       setProfile(userProfile);
-      setStats(userStats);
       setConversations(userConversations || []);
       setCefrLessons(userCefr || []);
+      // Default the range to span all existing activity (so nothing is hidden
+      // initially); narrowing it then filters every panel.
+      const dates = [
+        ...(userConversations || []).map((c) => c.started_at),
+        ...(userCefr || []).map((l) => l.completed_at),
+      ].filter(Boolean).map((s) => s.slice(0, 10)).sort();
+      if (dates.length) setRangeStart(dates[0]);
       setLoading(false);
     } catch (error) {
       console.error('Error loading dashboard:', error);
@@ -183,41 +217,63 @@ export default function DashboardPage() {
           </p>
         </motion.div>
 
+        {/* Global filters — language + date range drive every panel below. */}
+        <div className="glass rounded-xl p-3 mb-6 border border-gray-200/50 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex gap-1 items-center">
+            <span className="font-mono text-xs text-gray-400 mr-1">// filter:</span>
+            {(['global', 'en', 'fr', 'pt'] as const).map((opt) => (
+              <button
+                key={opt}
+                onClick={() => setFLang(opt)}
+                className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${fLang === opt ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}
+              >
+                {opt === 'global' ? 'Global' : opt.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 font-mono text-xs text-gray-600">
+            <input type="date" value={rangeStart} max={rangeEnd} onChange={(e) => setRangeStart(e.target.value)} className="bg-white/70 border border-gray-200 rounded-md px-2 py-1" />
+            <span>→</span>
+            <input type="date" value={rangeEnd} min={rangeStart} onChange={(e) => setRangeEnd(e.target.value)} className="bg-white/70 border border-gray-200 rounded-md px-2 py-1" />
+          </div>
+        </div>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard
             icon="📚"
             title="totalConversations"
-            value={stats?.totalConversations || 0}
-            subtitle={`${stats?.totalConversations || 0} ${d.dashboard.completed}`}
+            value={fStats.totalConversations}
+            subtitle={`${fStats.totalConversations} ${d.dashboard.completed}`}
             delay={0}
           />
           <StatCard
             icon="✅"
             title="averageScore"
-            value={`${stats?.averageScore || 0}/100`}
+            value={`${fStats.averageScore}/100`}
             subtitle={d.dashboard.overall}
             delay={0.1}
           />
           <StatCard
             icon="⏱"
             title="practice_time"
-            value={`${stats?.totalTimeMinutes || 0}m`}
+            value={`${fStats.totalTimeMinutes}m`}
             subtitle={d.dashboard.speakingTime}
             delay={0.2}
           />
           <StatCard
             icon="⚡"
             title="last_activity"
-            value={stats?.lastActivity ? d.dashboard.recently : d.dashboard.noActivity}
+            value={fStats.lastActivity ? d.dashboard.recently : d.dashboard.noActivity}
             subtitle={d.dashboard.mostRecent}
             delay={0.3}
           />
         </div>
 
-        {/* CEFR progress — target vs assessed (avg ⌊·⌋); owns its own filters */}
+        {/* CEFR progress — target vs assessed (avg ⌊·⌋). Language + range come
+            from the global filters above; the chart keeps its own day/month toggle. */}
         <div className="mb-8">
-          <CefrTrendChart lessons={cefrLessons} standalone />
+          <CefrTrendChart lessons={cefrForChart} controls="granularity" rangeStart={rangeStart} rangeEnd={rangeEnd} />
         </div>
 
         {/* Two Column Layout */}
@@ -241,13 +297,13 @@ export default function DashboardPage() {
                 </Link>
               </div>
 
-              {conversations.length === 0 ? (
+              {filteredConversations.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <span className="text-3xl">💬</span>
                   </div>
                   <p className="text-gray-500 font-mono text-sm mb-6">
-                    <span className="text-gray-400">// </span>no_conversations_yet
+                    <span className="text-gray-400">// </span>{conversations.length === 0 ? 'no_conversations_yet' : 'no_conversations_in_range'}
                   </p>
                   <button
                     onClick={() => setSetupOpen(true)}
@@ -258,7 +314,7 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
-                  {conversations.map((conv, i) => (
+                  {filteredConversations.map((conv, i) => (
                     <Link
                       key={i}
                       href={`/dashboard/session/${conv.scenario_id}`}
