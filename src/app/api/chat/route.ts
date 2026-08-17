@@ -119,7 +119,7 @@ export async function POST(request: Request) {
         role: 'user',
         content: `Start the practice now. Open with ${angle}.
 First, output ONE line exactly in the form "TITLE: <a 3-6 word scenario title in ${lang.promptName}>".
-Then output ONE line exactly in the form "SPEAKER: <your persona's first name only>" — the name you chose for your character.
+Then output ONE line exactly in the form "SPEAKER: <your persona's first name only> | <male|female>" — the name you chose for your character and the gender that name implies (so the voice can match).
 Then, on the next line, speak your opening line in character — introduce yourself (use that same name) and describe the situation (spoken dialogue only, in ${lang.promptName}).${level ? ` Keep this opening at the learner's CEFR ${level} level: honor the length/complexity limit above (for A1/A2, a short, simple greeting + situation in a couple of short sentences — not a long paragraph).` : ''}`,
       });
     }
@@ -138,6 +138,7 @@ Then, on the next line, speak your opening line in character — introduce yours
     // not spoken; it becomes the scenario title shown in the UI.
     let title: string | null = null;
     let speaker: string | null = null;
+    let speakerGender: 'male' | 'female' | null = null;
     let text = result.text;
     if (isOpening) {
       const match = text.match(/^\s*TITLE:\s*(.+?)\s*(?:\r?\n|$)/i);
@@ -145,11 +146,14 @@ Then, on the next line, speak your opening line in character — introduce yours
         title = match[1].replace(/["'*]/g, '').trim();
         text = text.slice(match[0].length);
       }
-      // Pull the model-chosen persona name so the UI can label the AI dynamically
-      // (a different believable person per scenario), instead of a fixed "Sarah".
+      // Pull the model-chosen persona name + gender so the UI can label the AI
+      // dynamically and the voice can match, instead of a fixed "Sarah".
       const sp = text.match(/^\s*SPEAKER:\s*(.+?)\s*(?:\r?\n|$)/i);
       if (sp) {
-        speaker = sp[1].replace(/["'*.]/g, '').trim().split(/\s+/)[0] || null;
+        const raw = sp[1].replace(/["'*.]/g, '').trim();
+        const [namePart, genderPart] = raw.split('|').map((s) => s.trim());
+        speaker = (namePart || '').split(/\s+/)[0] || null;
+        speakerGender = /female|woman|f\b/i.test(genderPart || '') ? 'female' : /male|man|m\b/i.test(genderPart || '') ? 'male' : null;
         text = text.slice(sp[0].length);
       }
     }
@@ -164,6 +168,7 @@ Then, on the next line, speak your opening line in character — introduce yours
       message: cleanMessage,
       title,
       speaker,
+      speakerGender,
       tokenUsage,
       provider: result.provider,
       model: result.model,

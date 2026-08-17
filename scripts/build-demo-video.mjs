@@ -44,7 +44,8 @@ const LANGS = {
   en: {
     label: 'English', modal: /English/, level: 'B2', role: 'Backend Engineer', industry: 'TECH',
     voiceId: env.DEMO_VOICE_ID_EN || 'NypX9UBqm1VQg8EJz4Q2',
-    ai: { languageCode: 'en-US', name: 'en-US-Studio-O', rate: 1.0, pitch: 0 }, // female English (Studio)
+    aiFemale: { languageCode: 'en-US', name: 'en-US-Studio-O', rate: 1.0, pitch: 0 },
+    aiMale: { languageCode: 'en-US', name: 'en-US-Studio-Q', rate: 1.0, pitch: 0 },
     turns: [
       "What's failing, and which service is affected?",
       "Let me trace the logs — I'll add an index and a regression test.",
@@ -53,7 +54,8 @@ const LANGS = {
   fr: {
     label: 'Français', modal: /Fran[cç]ais|French/, level: 'A2', role: 'Backend Engineer', industry: 'TECH',
     voiceId: env.DEMO_VOICE_ID_FR || 'Xyk1BdokdMYgjKUWcBeC',
-    ai: { languageCode: 'fr-FR', name: 'fr-FR-Studio-A', rate: 1.0, pitch: 0 }, // female French (Studio)
+    aiFemale: { languageCode: 'fr-FR', name: 'fr-FR-Studio-A', rate: 1.0, pitch: 0 },
+    aiMale: { languageCode: 'fr-FR', name: 'fr-FR-Studio-D', rate: 1.0, pitch: 0 },
     turns: [ // simple A2 phrasing
       "Quel service ne marche pas ? C’est grave ?",
       "D’accord. Je regarde les logs et je corrige le problème.",
@@ -63,7 +65,8 @@ const LANGS = {
     label: 'Português', modal: /Portugu[eê]s|Portuguese/, level: 'B1', role: 'Senior Analyst, Finance Business Partner', industry: 'FINANCE',
     voiceId: env.DEMO_VOICE_ID_PT || '65eDZ1TeXBiKsM7pqBBi',
     voiceSpeed: 0.78, // the PT clone runs fast; slow it to a B1 pace
-    ai: { languageCode: 'pt-BR', name: 'pt-BR-Neural2-C', rate: 1.0, pitch: 0 }, // female Portuguese (Neural2 — no Studio tier)
+    aiFemale: { languageCode: 'pt-BR', name: 'pt-BR-Neural2-C', rate: 1.0, pitch: 0 }, // no Studio tier for pt-BR
+    aiMale: { languageCode: 'pt-BR', name: 'pt-BR-Neural2-B', rate: 1.0, pitch: 0 },
     turns: [ // finance business-partner scenario, simple B1 phrasing
       "Qual é a diferença no orçamento deste mês?",
       "Certo. Vou revisar os números e preparar a previsão.",
@@ -76,7 +79,7 @@ if (!L.voiceId) throw new Error(`No cloned voice id for ${LANG}; set DEMO_VOICE_
 
 const VOICES = {
   narrator: { languageCode: 'es-US', name: 'es-US-Studio-B', rate: 1.0, pitch: 0 },  // Latin Spanish voice-over (Google Studio)
-  ai:       L.ai,                                                                     // AI colleague, speaks the scenario language
+  ai:       L.aiFemale,                                                               // AI colleague; overridden by captured gender in main()
   user:     { provider: 'eleven', voiceId: L.voiceId, speed: L.voiceSpeed },         // the owner's cloned voice for this language
 };
 // The brand is spoken /spiːk eɪˈaɪ/ ("speak A-I"), never spelled out. Studio
@@ -178,6 +181,8 @@ async function capture() {
   await input().waitFor({ state: 'visible', timeout: 20_000 });
   await bubbles().first().waitFor({ timeout: 45_000 }); await page.waitForTimeout(1200);
   const aiOpener = (await bubbles().first().innerText()).trim();
+  // Persona gender (from the hidden marker the demo page exposes) so the AI voice matches the name.
+  const partnerGender = await page.getAttribute('[data-testid="ai-partner"]', 'data-gender').catch(() => '');
   await shot('conv0');
 
   const aiReplies = [];
@@ -227,12 +232,16 @@ async function capture() {
   await shot('progress');
 
   await browser.close();
-  return { aiOpener, aiReplies };
+  return { aiOpener, aiReplies, partnerGender };
 }
 
 async function main() {
   if (!ffmpegPath) throw new Error('ffmpeg-static not found');
   const cap = await capture();
+
+  // Match the AI colleague's voice to the persona's gender.
+  VOICES.ai = cap.partnerGender === 'male' ? L.aiMale : L.aiFemale;
+  console.log(`  AI persona gender: ${cap.partnerGender || 'unknown→female'} → ${VOICES.ai.name}`);
 
   // Tight storyboard (≤45s). Narration in Latin-American Spanish; dialogue in
   // English. badge: null | 'rec' | 'speak'
