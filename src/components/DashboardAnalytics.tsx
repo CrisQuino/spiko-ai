@@ -11,8 +11,15 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { type AdminLesson } from '@/lib/admin-queries';
+import { channelOf, type Channel } from '@/lib/supabase';
 import { useUi } from '@/lib/ui-i18n';
 import CefrTrendChart from '@/components/CefrTrendChart';
+
+const CHANNEL_META: Record<Channel, { label: string; badge: string }> = {
+  free: { label: 'Free', badge: 'bg-gray-100 text-gray-600' },
+  b2c: { label: 'B2C', badge: 'bg-emerald-100 text-emerald-700' },
+  b2b: { label: 'B2B', badge: 'bg-indigo-100 text-indigo-700' },
+};
 
 type Lang = 'global' | 'en' | 'fr' | 'pt';
 type Granularity = 'day' | 'month';
@@ -58,23 +65,36 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
   const [rangeEnd, setRangeEnd] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [selectedUser, setSelectedUser] = useState<{ id: string; email: string | null } | null>(null);
   const [topSort, setTopSort] = useState<SortKey>('cost');
+  // Channel = revenue tier (free / B2C paid / B2B corporate). Super-admin only —
+  // for clarity of costs vs revenue by channel. Applied first, before everything.
+  const [channel, setChannel] = useState<'all' | Channel>('all');
   // 'all' | 'b2c' (no company) | '<company_id>'
   const [company, setCompany] = useState<string>('all');
 
-  // Distinct companies present in the data — drives the company filter. B2C =
-  // lessons whose owner has no company_id (individual/self-serve users).
+  const channelLessons = useMemo(
+    () => (channel === 'all' ? lessons : lessons.filter((l) => channelOf(l) === channel)),
+    [lessons, channel],
+  );
+  // Which channels are actually present (so we only offer real options).
+  const channelOptions = useMemo(() => {
+    const s = new Set<Channel>();
+    lessons.forEach((l) => s.add(channelOf(l)));
+    return (['free', 'b2c', 'b2b'] as Channel[]).filter((c) => s.has(c));
+  }, [lessons]);
+
+  // Distinct companies present in the (channel-filtered) data — drives the company filter.
   const companyOptions = useMemo(() => {
     const m = new Map<string, string>();
     let hasB2c = false;
-    lessons.forEach((l) => { if (l.company_id) m.set(l.company_id, l.company_name || l.company_id); else hasB2c = true; });
+    channelLessons.forEach((l) => { if (l.company_id) m.set(l.company_id, l.company_name || l.company_id); else hasB2c = true; });
     return { companies: [...m.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)), hasB2c };
-  }, [lessons]);
+  }, [channelLessons]);
   // The company filter drives EVERYTHING (KPIs included), applied before language.
   const companyLessons = useMemo(() => {
-    if (company === 'all') return lessons;
-    if (company === 'b2c') return lessons.filter((l) => !l.company_id);
-    return lessons.filter((l) => l.company_id === company);
-  }, [lessons, company]);
+    if (company === 'all') return channelLessons;
+    if (company === 'b2c') return channelLessons.filter((l) => !l.company_id);
+    return channelLessons.filter((l) => l.company_id === company);
+  }, [channelLessons, company]);
 
   const langLessons = useMemo(() => (lang === 'global' ? companyLessons : companyLessons.filter((l) => l.language === lang)), [companyLessons, lang]);
   // Everything except the "this month/today" KPIs derives from the date range.
@@ -115,10 +135,10 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
   const xAt = (i: number) => (series.length > 1 ? 8 + (i / (series.length - 1)) * 84 : 50);
 
   const users = useMemo(() => {
-    const m: Record<string, { user_id: string; email: string | null; lessons: number; cost: number; tokens: number; last: string; cefrSum: number; cefrN: number }> = {};
+    const m: Record<string, { user_id: string; email: string | null; company_id: string | null; plan: string | null; lessons: number; cost: number; tokens: number; last: string; cefrSum: number; cefrN: number }> = {};
     rangeLessons.forEach((l) => {
       const k = l.user_id;
-      if (!m[k]) m[k] = { user_id: k, email: l.email, lessons: 0, cost: 0, tokens: 0, last: l.completed_at, cefrSum: 0, cefrN: 0 };
+      if (!m[k]) m[k] = { user_id: k, email: l.email, company_id: l.company_id, plan: l.plan, lessons: 0, cost: 0, tokens: 0, last: l.completed_at, cefrSum: 0, cefrN: 0 };
       m[k].lessons += 1;
       m[k].cost += Number(l.total_cost || 0);
       m[k].tokens += Number(l.total_tokens || 0);
@@ -152,6 +172,9 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-end gap-3 flex-wrap">
+        {!priceView && channelOptions.length > 1 && (
+          <ChannelSelector value={channel} onChange={(v) => { setChannel(v); setCompany('all'); setSelectedUser(null); }} options={channelOptions} />
+        )}
         {companyOptions.companies.length + (companyOptions.hasB2c ? 1 : 0) > 1 && (
           <CompanySelector value={company} onChange={(v) => { setCompany(v); setSelectedUser(null); }} options={companyOptions} />
         )}
@@ -277,7 +300,7 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
                 <div className="flex items-center space-x-3 min-w-0">
                   <div className="w-8 h-8 shrink-0 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-mono text-sm font-bold">{i + 1}</div>
                   <div className="min-w-0">
-                    <p className="font-mono text-sm text-gray-800 truncate">{u.email || `${u.user_id.slice(0, 8)}…`}</p>
+                    <p className="font-mono text-sm text-gray-800 truncate flex items-center gap-1.5"><span className="truncate">{u.email || `${u.user_id.slice(0, 8)}…`}</span><ChannelBadge lesson={u} /></p>
                     <p className="font-mono text-xs text-gray-500">{u.lessons} lessons · {u.tokens.toLocaleString()} tok · avg CEFR {u.cefr >= 0 ? CEFR[Math.floor(u.cefr)] : '—'}</p>
                     <p className="font-mono text-[10px] text-gray-400">last: {new Date(u.last).toLocaleDateString()}</p>
                   </div>
@@ -343,7 +366,7 @@ export default function DashboardAnalytics({ lessons, sessionHref = '/dashboard/
               {recent.map((lesson) => (
                 <tr key={lesson.lesson_id} className="border-b border-gray-200 hover:bg-white/50">
                   <td className="py-3 px-4 font-mono text-sm">{new Date(lesson.completed_at).toLocaleDateString()}</td>
-                  <td className="py-3 px-4 font-mono text-sm text-gray-700">{lesson.email || (lesson.user_id ? `${lesson.user_id.slice(0, 8)}…` : '—')}</td>
+                  <td className="py-3 px-4 font-mono text-sm text-gray-700"><span className="inline-flex items-center gap-1.5">{lesson.email || (lesson.user_id ? `${lesson.user_id.slice(0, 8)}…` : '—')}<ChannelBadge lesson={lesson} /></span></td>
                   <td className="py-3 px-4 font-mono text-xs text-gray-500 uppercase">{lesson.language}</td>
                   <td className="py-3 px-4">
                     <Link href={`${sessionHref}/${lesson.lesson_id}`} className="tech-badge-emerald text-xs hover:underline" title="Review this session">{lesson.scenario_title || '—'} →</Link>
@@ -387,6 +410,24 @@ function LangSelector({ value, onChange }: { value: Lang; onChange: (l: Lang) =>
       ))}
     </div>
   );
+}
+
+function ChannelSelector({ value, onChange, options }: { value: 'all' | Channel; onChange: (v: 'all' | Channel) => void; options: Channel[] }) {
+  return (
+    <div className="flex gap-1 items-center">
+      <span className="font-mono text-xs text-gray-400 mr-1">Channel:</span>
+      {(['all', ...options] as const).map((opt) => (
+        <button key={opt} onClick={() => onChange(opt)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${value === opt ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>
+          {opt === 'all' ? 'All' : CHANNEL_META[opt].label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ChannelBadge({ lesson }: { lesson: { company_id: string | null; plan: string | null } }) {
+  const c = channelOf(lesson);
+  return <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold ${CHANNEL_META[c].badge}`}>{CHANNEL_META[c].label}</span>;
 }
 
 function CompanySelector({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { companies: { id: string; name: string }[]; hasB2c: boolean } }) {

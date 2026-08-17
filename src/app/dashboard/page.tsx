@@ -7,6 +7,8 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import PracticeSetup from '@/components/PracticeSetup';
 import CefrTrendChart from '@/components/CefrTrendChart';
+import DashboardPaywall from '@/components/DashboardPaywall';
+import { channelOf } from '@/lib/supabase';
 import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
 export default function DashboardPage() {
@@ -18,6 +20,8 @@ export default function DashboardPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isUserAdmin, setIsUserAdmin] = useState(false);
   const [isManager, setIsManager] = useState(false);
+  // Free (not-purchased) individuals get the paywall gate instead of the dashboard.
+  const [isFree, setIsFree] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
   const [setupOpen, setSetupOpen] = useState(false);
   const [cefrLessons, setCefrLessons] = useState<CefrLesson[]>([]);
@@ -77,10 +81,13 @@ export default function DashboardPage() {
       setIsUserAdmin(isAdminUser);
       
       let userProfile = await getUserProfile(user.id);
-      
+
       if (userProfile) {
         const isManagerRole = userProfile.role === 'manager';
         setIsManager(isManagerRole);
+        // Gate the dashboard for free individuals (no company + not premium).
+        // Admins/managers/corporate/B2C-paid keep full access.
+        setIsFree(!isAdminUser && channelOf(userProfile) === 'free');
       }
       
       if (userProfile && !userProfile.full_name && user.user_metadata?.full_name) {
@@ -136,6 +143,12 @@ export default function DashboardPage() {
   }
 
   const firstName = profile?.full_name?.split(' ')[0] || 'there';
+
+  // Free individuals: paywall gate instead of the dashboard. They can still run a
+  // scenario + see a CEFR result from /demo.
+  if (isFree) {
+    return <DashboardPaywall firstName={profile?.full_name?.split(' ')[0]} />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-emerald-50/20 to-cyan-50/20">
