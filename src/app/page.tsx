@@ -17,10 +17,45 @@ const PLAN_META = [
 // Demo videos — one per language, each a DISTINCT scenario (level + industry).
 // Selector label: language · CEFR level · industry.
 const DEMOS = [
-  { code: 'en', flag: '🇬🇧', label: 'EN', level: 'B2', industry: 'TECH' },
-  { code: 'fr', flag: '🇫🇷', label: 'FR', level: 'A2', industry: 'TECH' },
-  { code: 'pt', flag: '🇧🇷', label: 'PT', level: 'B1', industry: 'FINANCE' },
+  { code: 'en', label: 'EN', level: 'B2', industry: 'TECH' },
+  { code: 'fr', label: 'FR', level: 'A2', industry: 'TECH' },
+  { code: 'pt', label: 'PT', level: 'B1', industry: 'FINANCE' },
 ];
+
+// Inline SVG flags — emoji flags don't render on Windows (they show the letter
+// pair), so we draw them.
+function FlagIcon({ code }: { code: string }) {
+  const cls = 'inline-block w-5 h-3.5 rounded-[2px] align-middle shadow-sm ring-1 ring-black/10';
+  if (code === 'fr') {
+    return (
+      <svg viewBox="0 0 3 2" className={cls} preserveAspectRatio="none">
+        <rect width="3" height="2" fill="#fff" /><rect width="1" height="2" fill="#0055A4" /><rect x="2" width="1" height="2" fill="#EF4135" />
+      </svg>
+    );
+  }
+  if (code === 'pt') {
+    return (
+      <svg viewBox="0 0 20 14" className={cls} preserveAspectRatio="none">
+        <rect width="20" height="14" fill="#009C3B" />
+        <polygon points="10,1.6 18.4,7 10,12.4 1.6,7" fill="#FFDF00" />
+        <circle cx="10" cy="7" r="3.1" fill="#002776" />
+      </svg>
+    );
+  }
+  // en → Union Jack (simplified)
+  return (
+    <svg viewBox="0 0 60 30" className={cls} preserveAspectRatio="none">
+      <clipPath id="ukclip"><rect width="60" height="30" /></clipPath>
+      <g clipPath="url(#ukclip)">
+        <rect width="60" height="30" fill="#012169" />
+        <path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" strokeWidth="6" />
+        <path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" strokeWidth="4" />
+        <path d="M30,0 V30 M0,15 H60" stroke="#fff" strokeWidth="10" />
+        <path d="M30,0 V30 M0,15 H60" stroke="#C8102E" strokeWidth="6" />
+      </g>
+    </svg>
+  );
+}
 
 export default function Home() {
   const router = useRouter();
@@ -250,8 +285,8 @@ export default function Home() {
                     : 'bg-white/70 text-gray-600 border-gray-200 hover:bg-white'
                 }`}
               >
-                <span className="mr-1.5">{dm.flag}</span>
-                <span className="font-bold">{dm.label}</span>
+                <FlagIcon code={dm.code} />
+                <span className="font-bold ml-1.5">{dm.label}</span>
                 <span className={demoLang === dm.code ? 'text-white/80' : 'text-gray-400'}> · {dm.level} · {dm.industry}</span>
               </button>
             ))}
