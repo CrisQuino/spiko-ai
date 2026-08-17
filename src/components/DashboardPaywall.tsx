@@ -16,10 +16,31 @@ import { supabase } from '@/lib/supabase';
 export default function DashboardPaywall({ firstName }: { firstName?: string }) {
   const router = useRouter();
   const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const onSubscribe = () => {
-    // Wired to the Wompi checkout flow separately; no-op for now.
-    setNote('// checkout_coming_soon — ¡pronto podrás suscribirte!');
+  const onSubscribe = async () => {
+    setBusy(true);
+    setNote('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (res.status === 503) {
+        setNote('// checkout_coming_soon — ¡pronto podrás suscribirte!');
+      } else if (res.ok) {
+        const { url } = await res.json();
+        if (url) { window.location.href = url; return; } // → Wompi Web Checkout
+        setNote('// no_checkout_url');
+      } else {
+        setNote('// checkout_error — inténtalo de nuevo en un momento');
+      }
+    } catch {
+      setNote('// checkout_error — inténtalo de nuevo en un momento');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const perks = [
@@ -57,9 +78,10 @@ export default function DashboardPaywall({ firstName }: { firstName?: string }) 
 
         <button
           onClick={onSubscribe}
-          className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 text-white text-lg font-mono font-semibold hover:shadow-xl transition-all mb-3"
+          disabled={busy}
+          className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 text-white text-lg font-mono font-semibold hover:shadow-xl transition-all mb-3 disabled:opacity-60"
         >
-          <span className="mr-2">★</span> subscribe()
+          <span className="mr-2">★</span> {busy ? 'starting_checkout()…' : 'subscribe()'}
         </button>
         <div className="flex gap-3">
           <button
