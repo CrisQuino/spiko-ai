@@ -44,6 +44,10 @@ export default function DemoPage() {
   const totalTokensRef = useRef({ input: 0, output: 0 }); // mirror to avoid stale closures at completion
   const [scenarioTitle, setScenarioTitle] = useState<string | null>(null);
   const scenarioTitleRef = useRef<string | null>(null);
+  // The AI partner's name is chosen by the model per scenario (a different
+  // believable person each time), not a fixed "Sarah".
+  const [partnerName, setPartnerName] = useState<string>('AI');
+  const partnerNameRef = useRef<string>('AI');
   const [quickFeedback, setQuickFeedback] = useState<string[]>([]);
   const [cefrAssessment, setCefrAssessment] = useState<CEFRAssessment | null>(null);
   const [evaluating, setEvaluating] = useState(false);
@@ -610,6 +614,10 @@ export default function DemoPage() {
         if (data.title) {
           setScenarioTitle(data.title);
           scenarioTitleRef.current = data.title;
+        }
+        if (data.speaker) {
+          setPartnerName(data.speaker);
+          partnerNameRef.current = data.speaker;
         }
         if (data.tokenUsage) {
           const next = {
@@ -1458,7 +1466,7 @@ export default function DemoPage() {
                   <div className="w-1 h-7 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.3s' }}></div>
                 </div>
                 <div className="flex flex-col">
-                  <span className="font-mono font-bold text-lg">🔊 SARAH SPEAKING</span>
+                  <span className="font-mono font-bold text-lg">🔊 {partnerName.toUpperCase()} SPEAKING</span>
                   <span className="font-mono text-xs opacity-90">Playing audio message...</span>
                 </div>
               </div>
@@ -1484,9 +1492,9 @@ export default function DemoPage() {
                   {message.role === 'ai' && (
                     <div className="flex items-center space-x-2 mb-2">
                       <div className={`w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center text-white text-xs font-mono shadow-lg ${showAudioIndicator ? 'animate-pulse ring-4 ring-purple-300' : ''}`}>
-                        SC
+                        {partnerName.slice(0, 2).toUpperCase()}
                       </div>
-                      <span className="text-sm font-mono text-gray-600">Sarah_Chen</span>
+                      <span className="text-sm font-mono text-gray-600">{partnerName}</span>
                       {showAudioIndicator && (
                         <div className="flex items-center space-x-1 text-purple-500">
                           <div className="w-1 h-3 bg-purple-500 rounded-full animate-pulse"></div>
