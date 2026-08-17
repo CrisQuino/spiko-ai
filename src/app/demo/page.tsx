@@ -48,6 +48,8 @@ export default function DemoPage() {
   // believable person each time), not a fixed "Sarah".
   const [partnerName, setPartnerName] = useState<string>('AI');
   const partnerNameRef = useRef<string>('AI');
+  const [partnerGender, setPartnerGender] = useState<string>('');
+  const partnerGenderRef = useRef<string>('');
   const [quickFeedback, setQuickFeedback] = useState<string[]>([]);
   const [cefrAssessment, setCefrAssessment] = useState<CEFRAssessment | null>(null);
   const [evaluating, setEvaluating] = useState(false);
@@ -618,6 +620,10 @@ export default function DemoPage() {
         if (data.speaker) {
           setPartnerName(data.speaker);
           partnerNameRef.current = data.speaker;
+        }
+        if (data.speakerGender) {
+          setPartnerGender(data.speakerGender);
+          partnerGenderRef.current = data.speakerGender;
         }
         if (data.tokenUsage) {
           const next = {
@@ -1474,6 +1480,8 @@ export default function DemoPage() {
           )}
         </AnimatePresence>
         
+        {/* Hidden marker so the demo-video builder can read the AI persona + gender. */}
+        <span data-testid="ai-partner" data-name={partnerName} data-gender={partnerGender} className="hidden" />
         <div className="container mx-auto max-w-4xl space-y-6">
           <AnimatePresence>
             {messages.map((message, index) => {
