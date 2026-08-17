@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, channelOf, type Channel } from '@/lib/supabase';
 import { getAdminLessons, type AdminLesson } from '@/lib/admin-queries';
+
+const CHANNEL_LABEL: Record<Channel, string> = { free: 'Free', b2c: 'B2C', b2b: 'B2B' };
+const CHANNEL_BADGE: Record<Channel, string> = { free: 'bg-gray-100 text-gray-600', b2c: 'bg-emerald-100 text-emerald-700', b2b: 'bg-indigo-100 text-indigo-700' };
 import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 import DashboardAnalytics from '@/components/DashboardAnalytics';
 
@@ -139,6 +142,7 @@ function SuperAdminPanel() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', allowed_email_domain: '', max_users: '5', daily_practice_limit: '', monthly_practice_limit: '', max_jds_per_user: '' });
   const [banQuery, setBanQuery] = useState('');
+  const [channelFilter, setChannelFilter] = useState<'all' | Channel>('all');
   const [b2cUsers, setB2cUsers] = useState<{ id: string; email: string; full_name: string | null; plan: string; company: string | null; company_id: string | null; banned: boolean }[] | null>(null);
   const [b2cLoading, setB2cLoading] = useState(false);
   const [highlightMember, setHighlightMember] = useState<string | null>(null);
@@ -392,26 +396,29 @@ function SuperAdminPanel() {
       <div className="mt-8 pt-6 border-t border-gray-200">
         <h3 className="font-mono text-sm text-gray-500 mb-1">account_access() <span className="text-gray-400">— B2C login control (ban / delete)</span></h3>
         <p className="font-mono text-xs text-gray-400 mb-3">Type to filter. B2C users can be banned (reversible) or deleted (hard reset — clears their lesson history). Corporate members are shown for lookup only (blue) and managed from their company panel.</p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             value={banQuery} onChange={(e) => setBanQuery(e.target.value)}
             placeholder="type to search by email… (blank = all users)"
             className="flex-1 min-w-[220px] bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm"
           />
-          <span className="font-mono text-xs text-gray-400 shrink-0">{b2cLoading ? 'searching…' : b2cUsers ? `${b2cUsers.length} shown` : ''}</span>
+          <div className="flex gap-1 items-center">
+            {(['all', 'free', 'b2c', 'b2b'] as const).map((c) => (
+              <button key={c} onClick={() => setChannelFilter(c)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${channelFilter === c ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{c === 'all' ? 'All' : CHANNEL_LABEL[c]}</button>
+            ))}
+          </div>
+          <span className="font-mono text-xs text-gray-400 shrink-0">{b2cLoading ? 'searching…' : b2cUsers ? `${b2cUsers.filter((u) => channelFilter === 'all' || channelOf(u) === channelFilter).length} shown` : ''}</span>
         </div>
         {b2cUsers && (
           <div className="mt-3 max-h-64 overflow-y-auto space-y-1 pr-1">
-            {b2cUsers.length === 0 && <p className="font-mono text-xs text-gray-400">// no_users_match</p>}
-            {b2cUsers.map((u) => (
+            {(() => { const shown = b2cUsers.filter((u) => channelFilter === 'all' || channelOf(u) === channelFilter); return <>
+            {shown.length === 0 && <p className="font-mono text-xs text-gray-400">// no_users_match</p>}
+            {shown.map((u) => (
               <div key={u.id} className={`flex items-center justify-between gap-2 px-3 py-2 rounded-md font-mono text-xs ${u.company ? 'bg-indigo-50' : 'bg-white/60'}`}>
                 <span className="truncate min-w-0">
                   {u.email}
-                  {u.company ? (
-                    <span className="ml-2 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">in {u.company}</span>
-                  ) : (
-                    <span className="ml-2 px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{u.plan || 'b2c'}</span>
-                  )}
+                  <span className={`ml-2 px-1.5 py-0.5 rounded ${CHANNEL_BADGE[channelOf(u)]}`}>{CHANNEL_LABEL[channelOf(u)]}</span>
+                  {u.company && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">in {u.company}</span>}
                   {u.banned && <span className="ml-2 px-1.5 py-0.5 rounded bg-red-100 text-red-700">banned</span>}
                 </span>
                 {u.company ? (
@@ -430,6 +437,7 @@ function SuperAdminPanel() {
                 )}
               </div>
             ))}
+            </>; })()}
           </div>
         )}
       </div>

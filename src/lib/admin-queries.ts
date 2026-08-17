@@ -62,6 +62,7 @@ export interface AdminLesson {
   scenario_title: string | null;
   company_id: string | null;
   company_name: string | null;
+  plan: string | null;
 }
 
 /**

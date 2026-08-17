@@ -15,10 +15,24 @@ export type Profile = {
   full_name: string | null;
   role: 'employee' | 'manager' | 'admin';
   company_id: string | null;
+  plan: 'free' | 'premium' | string;
   avatar_url: string | null;
   created_at: string;
   updated_at: string;
 };
+
+/**
+ * Channel classification used across dashboards + listings:
+ *  - 'b2b'  → belongs to a company (corporate seat)
+ *  - 'b2c'  → individual who has paid (plan === 'premium')
+ *  - 'free' → individual on the free tier (demo/not purchased)
+ */
+export type Channel = 'b2b' | 'b2c' | 'free';
+export function channelOf(p: { company_id?: string | null; plan?: string | null }): Channel {
+  if (p.company_id) return 'b2b';
+  if (p.plan === 'premium') return 'b2c';
+  return 'free';
+}
 
 export type Company = {
   id: string;
