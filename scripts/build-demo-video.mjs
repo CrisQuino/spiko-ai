@@ -62,6 +62,7 @@ const LANGS = {
   pt: {
     label: 'Português', modal: /Portugu[eê]s|Portuguese/, level: 'B1', role: 'Senior Analyst, Finance Business Partner', industry: 'FINANCE',
     voiceId: env.DEMO_VOICE_ID_PT || '65eDZ1TeXBiKsM7pqBBi',
+    voiceSpeed: 0.78, // the PT clone runs fast; slow it to a B1 pace
     ai: { languageCode: 'pt-BR', name: 'pt-BR-Neural2-C', rate: 1.0, pitch: 0 }, // female Portuguese (Neural2 — no Studio tier)
     turns: [ // finance business-partner scenario, simple B1 phrasing
       "Qual é a diferença no orçamento deste mês?",
@@ -76,7 +77,7 @@ if (!L.voiceId) throw new Error(`No cloned voice id for ${LANG}; set DEMO_VOICE_
 const VOICES = {
   narrator: { languageCode: 'es-US', name: 'es-US-Studio-B', rate: 1.0, pitch: 0 },  // Latin Spanish voice-over (Google Studio)
   ai:       L.ai,                                                                     // AI colleague, speaks the scenario language
-  user:     { provider: 'eleven', voiceId: L.voiceId },                              // the owner's cloned voice for this language
+  user:     { provider: 'eleven', voiceId: L.voiceId, speed: L.voiceSpeed },         // the owner's cloned voice for this language
 };
 // The brand is spoken /spiːk eɪˈaɪ/ ("speak A-I"), never spelled out. Studio
 // voices ignore SSML <phoneme>, so we spell it phonetically for the Latin
@@ -109,7 +110,7 @@ async function synth(text, v, outFile) {
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${v.voiceId}`, {
       method: 'POST',
       headers: { 'xi-api-key': ELEVEN_KEY, 'Content-Type': 'application/json', accept: 'audio/mpeg' },
-      body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.85, style: 0.15, use_speaker_boost: true } }),
+      body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.85, style: 0.15, use_speaker_boost: true, ...(v.speed ? { speed: v.speed } : {}) } }),
     });
     if (!r.ok) throw new Error(`ElevenLabs ${r.status}: ${(await r.text()).slice(0, 200)}`);
     fs.writeFileSync(outFile, Buffer.from(await r.arrayBuffer()));

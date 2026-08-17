@@ -119,7 +119,8 @@ export async function POST(request: Request) {
         role: 'user',
         content: `Start the practice now. Open with ${angle}.
 First, output ONE line exactly in the form "TITLE: <a 3-6 word scenario title in ${lang.promptName}>".
-Then, on the next line, speak your opening line in character — introduce yourself and describe the situation (spoken dialogue only, in ${lang.promptName}).${level ? ` Keep this opening at the learner's CEFR ${level} level: honor the length/complexity limit above (for A1/A2, a short, simple greeting + situation in a couple of short sentences — not a long paragraph).` : ''}`,
+Then output ONE line exactly in the form "SPEAKER: <your persona's first name only>" — the name you chose for your character.
+Then, on the next line, speak your opening line in character — introduce yourself (use that same name) and describe the situation (spoken dialogue only, in ${lang.promptName}).${level ? ` Keep this opening at the learner's CEFR ${level} level: honor the length/complexity limit above (for A1/A2, a short, simple greeting + situation in a couple of short sentences — not a long paragraph).` : ''}`,
       });
     }
 
@@ -136,12 +137,20 @@ Then, on the next line, speak your opening line in character — introduce yours
     // On the opening turn, pull the "TITLE:" line out of the response so it is
     // not spoken; it becomes the scenario title shown in the UI.
     let title: string | null = null;
+    let speaker: string | null = null;
     let text = result.text;
     if (isOpening) {
       const match = text.match(/^\s*TITLE:\s*(.+?)\s*(?:\r?\n|$)/i);
       if (match) {
         title = match[1].replace(/["'*]/g, '').trim();
         text = text.slice(match[0].length);
+      }
+      // Pull the model-chosen persona name so the UI can label the AI dynamically
+      // (a different believable person per scenario), instead of a fixed "Sarah".
+      const sp = text.match(/^\s*SPEAKER:\s*(.+?)\s*(?:\r?\n|$)/i);
+      if (sp) {
+        speaker = sp[1].replace(/["'*.]/g, '').trim().split(/\s+/)[0] || null;
+        text = text.slice(sp[0].length);
       }
     }
 
@@ -154,6 +163,7 @@ Then, on the next line, speak your opening line in character — introduce yours
     return NextResponse.json({
       message: cleanMessage,
       title,
+      speaker,
       tokenUsage,
       provider: result.provider,
       model: result.model,

@@ -17,9 +17,9 @@ const PLAN_META = [
 // Demo videos — one per language, each a DISTINCT scenario (level + industry).
 // Selector label: language · CEFR level · industry.
 const DEMOS = [
-  { code: 'en', label: 'EN', level: 'B2', industry: 'TECH' },
-  { code: 'fr', label: 'FR', level: 'A2', industry: 'TECH' },
-  { code: 'pt', label: 'PT', level: 'B1', industry: 'FINANCE' },
+  { code: 'en', flag: '🇬🇧', label: 'EN', level: 'B2', industry: 'TECH' },
+  { code: 'fr', flag: '🇫🇷', label: 'FR', level: 'A2', industry: 'TECH' },
+  { code: 'pt', flag: '🇧🇷', label: 'PT', level: 'B1', industry: 'FINANCE' },
 ];
 
 export default function Home() {
@@ -250,6 +250,7 @@ export default function Home() {
                     : 'bg-white/70 text-gray-600 border-gray-200 hover:bg-white'
                 }`}
               >
+                <span className="mr-1.5">{dm.flag}</span>
                 <span className="font-bold">{dm.label}</span>
                 <span className={demoLang === dm.code ? 'text-white/80' : 'text-gray-400'}> · {dm.level} · {dm.industry}</span>
               </button>

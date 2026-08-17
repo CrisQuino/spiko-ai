@@ -259,7 +259,9 @@ export async function POST(request: NextRequest) {
         for (const k of ['free_monthly_sessions', 'free_max_jds', 'premium_max_jds', 'margin_pct']) {
           if (patch?.[k] != null && patch[k] !== '') clean[k] = Number(patch[k]);
         }
-        const { data, error } = await db.from('platform_settings').update({ ...clean, updated_at: new Date().toISOString() }).eq('id', 1).select().single();
+        const cleanAll: Record<string, number | boolean> = { ...clean };
+        if (patch?.free_dashboard_enabled != null) cleanAll.free_dashboard_enabled = !!patch.free_dashboard_enabled;
+        const { data, error } = await db.from('platform_settings').update({ ...cleanAll, updated_at: new Date().toISOString() }).eq('id', 1).select().single();
         if (error) throw error;
         return NextResponse.json({ settings: data });
       }
