@@ -61,12 +61,20 @@ export default function DashboardPaywall({ firstName }: { firstName?: string }) 
         >
           <span className="mr-2">★</span> subscribe()
         </button>
-        <button
-          onClick={() => router.push('/demo')}
-          className="w-full py-3 rounded-xl glass border-2 border-gray-300 text-gray-700 font-mono font-semibold hover:border-cyan-500 transition-all"
-        >
-          &gt; keep_practicing()
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => router.push('/demo')}
+            className="flex-1 py-3 rounded-xl glass border-2 border-gray-300 text-gray-700 font-mono font-semibold hover:border-cyan-500 transition-all"
+          >
+            &gt; keep_practicing()
+          </button>
+          <button
+            onClick={() => router.push('/')}
+            className="flex-1 py-3 rounded-xl glass border-2 border-gray-300 text-gray-700 font-mono font-semibold hover:border-emerald-500 transition-all"
+          >
+            &lt; home()
+          </button>
+        </div>
 
         {note && <p className="mt-4 font-mono text-xs text-emerald-600">{note}</p>}
 

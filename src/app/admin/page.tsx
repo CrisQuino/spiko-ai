@@ -123,7 +123,7 @@ type Company = {
 };
 type Member = { id: string; email: string | null; full_name: string | null; role: string; status: string };
 type Pending = { id: string; email: string; role: string; status: string; expires_at: string };
-type Settings = { free_monthly_sessions: number; free_max_jds: number; premium_max_jds: number; margin_pct: number };
+type Settings = { free_monthly_sessions: number; free_max_jds: number; premium_max_jds: number; margin_pct: number; free_dashboard_enabled: boolean };
 type CompanyJd = { id: string; title: string; content: string; created_at: string };
 type ApiFn = (action: string, params?: Record<string, unknown>) => Promise<{ status: number; body: any }>;
 
@@ -182,6 +182,12 @@ function SuperAdminPanel() {
     const r = await api('update_settings', { patch: { ...sDraft } });
     setBusy(false);
     if (r.status === 200) { setSettings(r.body.settings); flash('✓ settings saved'); } else flash(`✕ ${r.body?.error || 'error'}`);
+  };
+
+  const toggleFreeDashboard = async (enabled: boolean) => {
+    const r = await api('update_settings', { patch: { free_dashboard_enabled: enabled } });
+    if (r.status === 200) { setSettings(r.body.settings); flash(enabled ? '✓ free users can enter the dashboard' : '✓ free users are gated (paywall)'); }
+    else flash(`✕ ${r.body?.error || 'error'}`);
   };
 
   const createCompany = async () => {
@@ -329,6 +335,23 @@ function SuperAdminPanel() {
             </span>
           )}
         </div>
+        {/* Free-user dashboard access toggle */}
+        {settings && (
+          <div className="mt-4 flex items-center justify-between gap-3 bg-white/60 border border-gray-200 rounded-lg px-4 py-3">
+            <div>
+              <p className="font-mono text-sm text-gray-700">free_dashboard_access</p>
+              <p className="font-mono text-xs text-gray-400">{settings.free_dashboard_enabled ? 'Free users can enter the dashboard.' : 'Free users see the subscribe paywall.'}</p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={settings.free_dashboard_enabled}
+              onClick={() => toggleFreeDashboard(!settings.free_dashboard_enabled)}
+              className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${settings.free_dashboard_enabled ? 'bg-emerald-500' : 'bg-gray-300'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${settings.free_dashboard_enabled ? 'translate-x-6' : ''}`} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Companies */}

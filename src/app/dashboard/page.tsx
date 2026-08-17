@@ -85,9 +85,12 @@ export default function DashboardPage() {
       if (userProfile) {
         const isManagerRole = userProfile.role === 'manager';
         setIsManager(isManagerRole);
-        // Gate the dashboard for free individuals (no company + not premium).
-        // Admins/managers/corporate/B2C-paid keep full access.
-        setIsFree(!isAdminUser && channelOf(userProfile) === 'free');
+        // Gate the dashboard for free individuals (no company + not premium),
+        // UNLESS the super-admin has enabled free-dashboard access globally.
+        const { data: settings } = await supabase
+          .from('platform_settings').select('free_dashboard_enabled').eq('id', 1).single();
+        const freeEnabled = settings?.free_dashboard_enabled === true;
+        setIsFree(!isAdminUser && channelOf(userProfile) === 'free' && !freeEnabled);
       }
       
       if (userProfile && !userProfile.full_name && user.user_metadata?.full_name) {
