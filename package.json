@@ -18,7 +18,9 @@
     "e2e:practice:judge": "node scripts/e2e-run.mjs --judge",
     "e2e:cleanup": "node scripts/e2e-cleanup.mjs",
     "e2e:coverage": "node scripts/e2e-coverage.mjs",
+    "e2e:coverage:routes": "node scripts/e2e-coverage-full.mjs",
     "e2e:full": "node scripts/e2e-full.mjs",
+    "e2e:all": "playwright test --project=chromium",
     "e2e:report": "playwright show-report",
     "typecheck": "tsc --noEmit",
     "ci": "npm run lint && npm run typecheck && npm run test -- --run && npm run build"
