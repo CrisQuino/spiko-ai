@@ -8,10 +8,12 @@ import { supabase } from '@/lib/supabase';
 import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 
 // Prices + which plan is highlighted (not translated).
-const PLAN_META = [
+// Starter is free; Pro price is hidden ("Soon") until we announce it; Enterprise
+// is corporate sales ("Custom" → Contact Sales).
+const PLAN_META: { price?: number; popular: boolean; soon?: boolean; contact?: boolean }[] = [
   { price: 0, popular: false },
-  { price: 12, popular: true },
-  { price: 299, popular: false },
+  { popular: true, soon: true },
+  { popular: false, contact: true },
 ];
 
 // Demo videos — one per language, each a DISTINCT scenario (level + industry).
@@ -62,10 +64,15 @@ export default function Home() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [demoLang, setDemoLang] = useState('en');
+  // Plan limits shown on the pricing cards come from the super-admin's live
+  // platform_settings (not hardcoded), so the marketing always matches the product.
+  const [limits, setLimits] = useState({ freeSessions: 3, freeJds: 1, premiumJds: 25 });
   const { d } = useUi();
-  
+
   useEffect(() => {
     checkAuth();
+    supabase.from('public_plan_limits').select('free_monthly_sessions, free_max_jds, premium_max_jds').single()
+      .then(({ data }) => { if (data) setLimits({ freeSessions: data.free_monthly_sessions, freeJds: data.free_max_jds, premiumJds: data.premium_max_jds }); });
   }, []);
   
   const checkAuth = async () => {
@@ -423,8 +430,16 @@ export default function Home() {
                 
                 <h3 className="text-2xl font-bold mb-2 font-mono">{plan.name}</h3>
                 <div className="mb-6">
-                  <span className="text-5xl font-bold font-mono">${PLAN_META[index].price}</span>
-                  {PLAN_META[index].price > 0 && <span className="text-gray-600 font-mono text-sm">{d.pricing.perMo}</span>}
+                  {PLAN_META[index].soon ? (
+                    <span className="inline-block text-2xl font-bold font-mono px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-white shadow-md">Soon</span>
+                  ) : PLAN_META[index].contact ? (
+                    <span className="text-4xl font-bold font-mono text-gray-800">Custom</span>
+                  ) : (
+                    <>
+                      <span className="text-5xl font-bold font-mono">${PLAN_META[index].price}</span>
+                      {(PLAN_META[index].price ?? 0) > 0 && <span className="text-gray-600 font-mono text-sm">{d.pricing.perMo}</span>}
+                    </>
+                  )}
                 </div>
 
                 <Link
@@ -439,12 +454,20 @@ export default function Home() {
                 </Link>
 
                 <ul className="space-y-3">
-                  {plan.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-start space-x-2 text-sm">
-                      <span className="text-emerald-500 mt-0.5">✓</span>
-                      <span className="text-gray-700">{feature}</span>
-                    </li>
-                  ))}
+                  {plan.features.map((feature, idx) => {
+                    // A leading "!" marks a feature the plan does NOT include.
+                    const excluded = feature.startsWith('!');
+                    const text = (excluded ? feature.slice(1) : feature)
+                      .replace('{freeSessions}', String(limits.freeSessions))
+                      .replace('{freeJds}', String(limits.freeJds))
+                      .replace('{premiumJds}', String(limits.premiumJds));
+                    return (
+                      <li key={idx} className="flex items-start space-x-2 text-sm">
+                        <span className={`mt-0.5 ${excluded ? 'text-gray-300' : 'text-emerald-500'}`}>{excluded ? '✕' : '✓'}</span>
+                        <span className={excluded ? 'text-gray-400 line-through' : 'text-gray-700'}>{text}</span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </motion.div>
             ))}
