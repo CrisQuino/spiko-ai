@@ -70,13 +70,18 @@ export default function DashboardPage() {
 
   const loadDashboard = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
+      // Use getSession() (reads local storage + auto-refreshes) as the auth gate
+      // instead of getUser() (a network call that can transiently return null
+      // right after a token refresh — e.g. returning from the Wompi checkout —
+      // and bounce a logged-in user to /login).
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+
       if (!user) {
         router.push('/auth/login');
         return;
       }
-      
+
       const isAdminUser = user.email === 'dash.crs@gmail.com';
       setIsUserAdmin(isAdminUser);
       
@@ -225,8 +230,11 @@ export default function DashboardPage() {
           animate={{ y: 0, opacity: 1 }}
           className="mb-8"
         >
-          <h2 className="text-3xl font-bold font-mono gradient-text mb-2">
-            {d.dashboard.welcome}, {firstName}! 👋
+          <h2 className="text-3xl font-bold font-mono gradient-text mb-2 flex items-center gap-3 flex-wrap">
+            <span>{d.dashboard.welcome}, {firstName}! 👋</span>
+            {profile?.plan === 'premium' && (
+              <span className="text-sm px-3 py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-white font-bold shadow-md tracking-wide">⭐ Premium!!!</span>
+            )}
           </h2>
           <p className="text-gray-600 font-mono text-sm">
             <span className="text-gray-400">// </span>{d.dashboard.subtitle}
