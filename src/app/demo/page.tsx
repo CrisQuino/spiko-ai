@@ -16,6 +16,14 @@ type Message = {
 
 type Phase = 'intro' | 'diagnosis' | 'resolution' | 'verification' | 'complete';
 
+// iOS Safari blocks mic access (getUserMedia / SpeechRecognition) outside a user
+// gesture, so the hands-free auto-restart can't run there — only there we fall
+// back to tap-to-talk. Auto-send on silence still works everywhere.
+const isTouchIOS = () =>
+  typeof navigator !== 'undefined' &&
+  (/iP(ad|hone|od)/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1));
+
 export default function DemoPage() {
   const [started, setStarted] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -716,13 +724,12 @@ export default function DemoPage() {
         setPendingAudioQueue(prev => {
           const newCount = Math.max(0, prev - 1);
           setTimeout(() => checkAndTriggerCompletion(), 50);
-          
-          // If voice mode is active and no more audio in queue, auto-start listening
-          if (newCount === 0 && voiceModeRef.current && !scenarioCompletedRef.current) {
-            console.log('🎙️ Voice mode: Auto-starting recording after AI response');
+          // Auto-restart listening for a hands-free flow — but NOT on iOS Safari,
+          // which blocks mic access outside a user gesture. There the learner taps
+          // the mic each turn (tap-to-talk). Auto-SEND on silence is unaffected.
+          if (newCount === 0 && voiceModeRef.current && !scenarioCompletedRef.current && !isTouchIOS()) {
             setTimeout(() => startVoiceRecording(), 500);
           }
-          
           return newCount;
         });
       };
@@ -802,31 +809,26 @@ export default function DemoPage() {
               console.log(`📊 Audio queue: ${prev} → ${newCount}`);
               // Check completion after state updates
               setTimeout(() => checkAndTriggerCompletion(), 50);
-              
-              // If voice mode is active and no more audio in queue, auto-start listening
-              if (newCount === 0 && voiceModeRef.current && !scenarioCompletedRef.current) {
-                console.log('🎙️ Voice mode: Auto-starting recording after AI response');
+              // Hands-free auto-restart (desktop). iOS needs a tap per turn.
+              if (newCount === 0 && voiceModeRef.current && !scenarioCompletedRef.current && !isTouchIOS()) {
                 setTimeout(() => startVoiceRecording(), 500);
               }
-              
+
               return newCount;
             });
             URL.revokeObjectURL(audioUrl);
           };
-          
+
           audio.onerror = (error) => {
             console.error('🔇 AUDIO ERROR:', error);
             setIsPlayingAudio(false);
             setPendingAudioQueue(prev => {
               const newCount = Math.max(0, prev - 1);
               setTimeout(() => checkAndTriggerCompletion(), 50);
-              
-              // Even on error, try to auto-start listening in voice mode
-              if (newCount === 0 && voiceModeRef.current && !scenarioCompletedRef.current) {
-                console.log('🎙️ Voice mode: Auto-starting recording despite audio error');
+              if (newCount === 0 && voiceModeRef.current && !scenarioCompletedRef.current && !isTouchIOS()) {
                 setTimeout(() => startVoiceRecording(), 500);
               }
-              
+
               return newCount;
             });
             URL.revokeObjectURL(audioUrl);
@@ -926,17 +928,16 @@ export default function DemoPage() {
   const startVoiceRecording = async () => {
     console.log('🎙️ STARTING VOICE RECORDING');
     
-    // First, request microphone permission explicitly
+    // Best-effort mic warm-up: desktop Chrome shows the permission prompt here.
+    // On iOS Safari the SpeechRecognition API requests the mic itself on start(),
+    // and a separate getUserMedia can reject — so we DON'T block the flow if it
+    // fails; recognition.start() (below, inside this same tap gesture) handles it,
+    // and recognition.onerror reports a real 'not-allowed' with guidance.
     try {
-      console.log('🔐 Requesting microphone permission...');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('✅ Microphone permission granted');
-      // Stop the stream immediately - we just needed permission
-      stream.getTracks().forEach(track => track.stop());
-    } catch (err: any) {
-      console.error('❌ Microphone permission denied:', err);
-      alert('Microphone access is required for voice input. Please allow microphone access in your browser settings and try again.');
-      return;
+      const stream = await navigator.mediaDevices?.getUserMedia?.({ audio: true });
+      stream?.getTracks().forEach((track) => track.stop());
+    } catch (err) {
+      console.warn('⚠️ getUserMedia not granted here; letting SpeechRecognition request the mic:', err);
     }
     
     // Check if browser supports Web Speech API
@@ -1001,12 +1002,16 @@ export default function DemoPage() {
       // Only stop on critical errors
       setIsRecording(false);
       
-      if (event.error === 'not-allowed') {
-        alert('Microphone access denied. Please allow microphone in your browser settings.');
-      } else if (event.error === 'aborted') {
-        console.log('🔇 Recording manually stopped');
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        if (isTouchIOS()) {
+          alert('No pudimos acceder al micrófono. En iPhone: Ajustes → Safari → Micrófono → "Permitir", y Ajustes → General → Teclado → activa "Dictado". Luego toca el micrófono de nuevo.');
+        } else {
+          alert('Microphone access denied. Please allow microphone for this site and try again.');
+        }
+      } else if (event.error === 'aborted' || event.error === 'no-speech') {
+        console.log('🔇 Recording stopped / no speech');
       } else {
-        alert(`Speech recognition error: ${event.error}`);
+        console.warn('Speech recognition error:', event.error);
       }
     };
     
