@@ -265,6 +265,16 @@ export async function POST(request: NextRequest) {
         if (error) throw error;
         return NextResponse.json({ settings: data });
       }
+      case 'list_messages': {
+        const { data } = await db.from('contact_messages').select('*').order('created_at', { ascending: false }).limit(200);
+        const unread = (data || []).filter((m: any) => m.status === 'new').length;
+        return NextResponse.json({ messages: data || [], unread });
+      }
+      case 'mark_message_read': {
+        const { id, status } = body as { id: string; status?: string };
+        await db.from('contact_messages').update({ status: status === 'new' ? 'new' : 'read' }).eq('id', id);
+        return NextResponse.json({ ok: true });
+      }
       default:
         return NextResponse.json({ error: 'unknown_action' }, { status: 400 });
     }
