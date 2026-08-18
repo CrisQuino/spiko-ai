@@ -427,9 +427,10 @@ function SuperAdminPanel() {
           />
           <div className="flex gap-1 items-center">
             {(['all', 'free', 'b2c', 'b2b'] as const).map((c) => (
-              <button key={c} onClick={() => setChannelFilter(c)} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${channelFilter === c ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{c === 'all' ? 'All' : CHANNEL_LABEL[c]}</button>
+              <button key={c} onClick={() => { setChannelFilter(c); searchUsers(banQuery); }} className={`px-2.5 py-1 rounded-md font-mono text-xs transition-all ${channelFilter === c ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{c === 'all' ? 'All' : CHANNEL_LABEL[c]}</button>
             ))}
           </div>
+          <button onClick={() => searchUsers(banQuery)} title="Reload the list" className="px-2 py-1 rounded-md font-mono text-xs bg-white/60 text-gray-600 hover:bg-white shrink-0">↻</button>
           <span className="font-mono text-xs text-gray-400 shrink-0">{b2cLoading ? 'searching…' : b2cUsers ? `${b2cUsers.filter((u) => channelFilter === 'all' || channelOf(u) === channelFilter).length} shown` : ''}</span>
         </div>
         {b2cUsers && (
