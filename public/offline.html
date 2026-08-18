@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Offline · SPEECK.AI</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+      background:#0b1020;color:#e5e7eb;
+      font-family:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;text-align:center}
+    .tile{width:84px;height:84px;border-radius:20px;margin:0 auto 22px;
+      background:linear-gradient(135deg,#10b981,#06b6d4 55%,#3b82f6);
+      display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:44px;letter-spacing:-3px;
+      box-shadow:0 12px 34px rgba(6,182,212,.35)}
+    h1{font-size:22px;margin-bottom:8px}
+    p{color:#94a3b8;font-size:14px;max-width:34ch;margin:0 auto 22px;line-height:1.6}
+    a{display:inline-block;padding:12px 22px;border-radius:12px;color:#fff;text-decoration:none;font-weight:700;
+      background:linear-gradient(90deg,#10b981,#06b6d4,#3b82f6)}
+    .tag{color:#7dd3c0;font-size:12px;margin-top:26px}
+  </style>
+</head>
+<body>
+  <div>
+    <div class="tile">&lt;/&gt;</div>
+    <h1>Sin conexión</h1>
+    <p>SPEECK.AI necesita internet para practicar con la IA. Revisa tu conexión e inténtalo de nuevo.</p>
+    <a href="/" onclick="location.reload()">reintentar()</a>
+    <div class="tag">// code your communication</div>
+  </div>
+</body>
+</html>

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
 import ContactSalesModal from '@/components/ContactSalesModal';
+import InstallPWA from '@/components/InstallPWA';
 
 // Prices + which plan is highlighted (not translated).
 // Starter is free; Pro price is hidden ("Soon") until we announce it; Enterprise
@@ -517,6 +518,7 @@ export default function Home() {
       </footer>
 
       <ContactSalesModal isOpen={contactOpen} onClose={() => setContactOpen(false)} />
+      <InstallPWA />
     </main>
   );
 }
