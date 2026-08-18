@@ -124,6 +124,7 @@ type Company = {
 type Member = { id: string; email: string | null; full_name: string | null; role: string; status: string };
 type Pending = { id: string; email: string; role: string; status: string; expires_at: string };
 type Settings = { free_monthly_sessions: number; free_max_jds: number; premium_max_jds: number; margin_pct: number; free_dashboard_enabled: boolean };
+type Msg = { id: string; subject: string; company: string | null; email: string | null; name: string | null; message: string; status: string; created_at: string };
 type CompanyJd = { id: string; title: string; content: string; created_at: string };
 type ApiFn = (action: string, params?: Record<string, unknown>) => Promise<{ status: number; body: any }>;
 
@@ -143,6 +144,8 @@ function SuperAdminPanel() {
   const [form, setForm] = useState({ name: '', allowed_email_domain: '', max_users: '5', daily_practice_limit: '', monthly_practice_limit: '', max_jds_per_user: '' });
   const [banQuery, setBanQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<'all' | Channel>('all');
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const [b2cUsers, setB2cUsers] = useState<{ id: string; email: string; full_name: string | null; plan: string; company: string | null; company_id: string | null; banned: boolean }[] | null>(null);
   const [b2cLoading, setB2cLoading] = useState(false);
   const [highlightMember, setHighlightMember] = useState<string | null>(null);
@@ -163,7 +166,7 @@ function SuperAdminPanel() {
   }, []);
 
   const loadAll = async () => {
-    const [s, c] = await Promise.all([api('get_settings'), api('list_companies')]);
+    const [s, c, m] = await Promise.all([api('get_settings'), api('list_companies'), api('list_messages')]);
     if (s.body?.settings) {
       setSettings(s.body.settings);
       setSDraft({
@@ -174,6 +177,11 @@ function SuperAdminPanel() {
       });
     }
     if (c.body?.companies) setCompanies(c.body.companies);
+    if (m.body?.messages) setMessages(m.body.messages);
+  };
+  const markMessage = async (id: string, status: 'read' | 'new') => {
+    await api('mark_message_read', { id, status });
+    setMessages((ms) => ms.map((x) => (x.id === id ? { ...x, status } : x)));
   };
   useEffect(() => { if (token) loadAll(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [token]);
 
@@ -301,8 +309,49 @@ function SuperAdminPanel() {
         <h2 className="text-xl font-bold font-mono">
           <span className="text-gray-400">// </span>super_admin()
         </h2>
-        {msg && <span className={`font-mono text-xs px-2.5 py-1 rounded-md ${msg.startsWith('✓') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{msg}</span>}
+        <div className="flex items-center gap-3">
+          {msg && <span className={`font-mono text-xs px-2.5 py-1 rounded-md ${msg.startsWith('✓') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{msg}</span>}
+          {/* Contact-sales inbox */}
+          <button onClick={() => setInboxOpen((v) => !v)} title="Contact-sales inbox" className="relative px-3 py-1.5 rounded-lg bg-white/70 border border-gray-200 hover:bg-white transition-all font-mono text-sm">
+            📥 inbox
+            {messages.filter((m) => m.status === 'new').length > 0 && (
+              <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">{messages.filter((m) => m.status === 'new').length}</span>
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Contact-sales inbox panel */}
+      {inboxOpen && (
+        <div className="mb-8 border border-gray-200 rounded-xl p-4 bg-white/50">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-mono text-sm text-gray-500">contact_sales_inbox() <span className="text-gray-400">[{messages.length}]</span></h3>
+            <span className="font-mono text-xs text-gray-400">{messages.filter((m) => m.status === 'new').length} sin leer</span>
+          </div>
+          {messages.length === 0 && <p className="font-mono text-xs text-gray-400">// no_messages_yet</p>}
+          <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+            {messages.map((m) => (
+              <div key={m.id} className={`rounded-lg border p-3 ${m.status === 'new' ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200 bg-white/60'}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-bold text-gray-800 flex items-center gap-2">
+                      {m.status === 'new' && <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />}
+                      {m.subject}
+                    </p>
+                    <p className="font-mono text-[11px] text-gray-500 mt-0.5">
+                      {m.company ? `${m.company} · ` : ''}{m.email || 'sin email'} · {new Date(m.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <button onClick={() => markMessage(m.id, m.status === 'new' ? 'read' : 'new')} className={`shrink-0 px-2 py-1 rounded font-mono text-[11px] ${m.status === 'new' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    {m.status === 'new' ? 'mark_read()' : 'mark_unread()'}
+                  </button>
+                </div>
+                <p className="font-mono text-xs text-gray-700 mt-2 whitespace-pre-wrap break-words">{m.message}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Platform settings */}
       <div className="mb-8">

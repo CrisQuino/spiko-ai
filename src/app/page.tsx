@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUi, LanguageSwitcher } from '@/lib/ui-i18n';
+import ContactSalesModal from '@/components/ContactSalesModal';
 
 // Prices + which plan is highlighted (not translated).
 // Starter is free; Pro price is hidden ("Soon") until we announce it; Enterprise
@@ -67,6 +68,7 @@ export default function Home() {
   // Plan limits shown on the pricing cards come from the super-admin's live
   // platform_settings (not hardcoded), so the marketing always matches the product.
   const [limits, setLimits] = useState({ freeSessions: 3, freeJds: 1, premiumJds: 25 });
+  const [contactOpen, setContactOpen] = useState(false);
   const { d } = useUi();
 
   useEffect(() => {
@@ -433,7 +435,7 @@ export default function Home() {
                   {PLAN_META[index].soon ? (
                     <span className="inline-block text-2xl font-bold font-mono px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-white shadow-md">Soon</span>
                   ) : PLAN_META[index].contact ? (
-                    <span className="text-4xl font-bold font-mono text-gray-800">Custom</span>
+                    <span className="text-3xl font-bold font-mono text-gray-800">{plan.cta}</span>
                   ) : (
                     <>
                       <span className="text-5xl font-bold font-mono">${PLAN_META[index].price}</span>
@@ -442,16 +444,25 @@ export default function Home() {
                   )}
                 </div>
 
-                <Link
-                  href="/auth/signup"
-                  className={`block w-full text-center py-3 rounded-xl font-mono font-semibold transition-all mb-6 ${
-                    PLAN_META[index].popular
-                      ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:shadow-xl'
-                      : 'glass border-2 border-gray-300 hover:border-cyan-500'
-                  }`}
-                >
-                  {plan.cta}
-                </Link>
+                {PLAN_META[index].contact ? (
+                  <button
+                    onClick={() => setContactOpen(true)}
+                    className="block w-full text-center py-3 rounded-xl font-mono font-semibold transition-all mb-6 glass border-2 border-gray-300 hover:border-cyan-500"
+                  >
+                    {plan.cta}
+                  </button>
+                ) : (
+                  <Link
+                    href="/auth/signup"
+                    className={`block w-full text-center py-3 rounded-xl font-mono font-semibold transition-all mb-6 ${
+                      PLAN_META[index].popular
+                        ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white hover:shadow-xl'
+                        : 'glass border-2 border-gray-300 hover:border-cyan-500'
+                    }`}
+                  >
+                    {plan.cta}
+                  </Link>
+                )}
 
                 <ul className="space-y-3">
                   {plan.features.map((feature, idx) => {
@@ -504,6 +515,8 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      <ContactSalesModal isOpen={contactOpen} onClose={() => setContactOpen(false)} />
     </main>
   );
 }

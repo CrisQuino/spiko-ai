@@ -75,7 +75,7 @@ const en: Dict = {
     perMo: '/mo',
     plans: [
       { name: 'Starter', cta: 'Start Free', features: ['{freeSessions} scenarios per month', 'Basic AI feedback', 'Instant CEFR assessment each session', '{freeJds} job description', '!Progress dashboard & history', '!Review past sessions with feedback', '!Premium natural voices'] },
-      { name: 'Pro', cta: 'Go Pro', features: ['Unlimited scenarios', 'Advanced AI feedback', 'Bonus practice for the most active users', 'Full progress dashboard (CEFR trend & analytics)', 'Review any past session with full feedback', 'Premium natural AI voices', 'Up to {premiumJds} job descriptions', 'Priority support'] },
+      { name: 'Pro', cta: 'Go Pro', features: ['Unlimited scenarios', 'Advanced AI feedback', 'Bonus practice for the most active users', 'Full progress dashboard (CEFR trend & analytics)', 'Review any past session with full feedback', 'Premium natural AI voices', 'Up to {premiumJds} job descriptions'] },
       { name: 'Enterprise', cta: 'Contact Sales', features: ['Everything in Pro', 'Team dashboard & manager analytics', 'Company-wide shared scenarios', 'Invite & manage members', 'Unlimited members', 'Dedicated support'] },
     ],
   },
@@ -135,7 +135,7 @@ const es: Dict = {
     perMo: '/mes',
     plans: [
       { name: 'Starter', cta: 'Empezar gratis', features: ['{freeSessions} escenarios al mes', 'Feedback básico con IA', 'Evaluación CEFR al instante en cada sesión', '{freeJds} descripción de puesto', '!Dashboard de progreso e historial', '!Revisar sesiones anteriores con feedback', '!Voces naturales premium'] },
-      { name: 'Pro', cta: 'Hazte Pro', features: ['Escenarios ilimitados', 'Feedback avanzado con IA', 'Práctica bonus para los usuarios más activos', 'Dashboard de progreso completo (tendencia CEFR y analíticas)', 'Revisa cualquier sesión anterior con feedback completo', 'Voces de IA naturales premium', 'Hasta {premiumJds} descripciones de puesto', 'Soporte prioritario'] },
+      { name: 'Pro', cta: 'Hazte Pro', features: ['Escenarios ilimitados', 'Feedback avanzado con IA', 'Práctica bonus para los usuarios más activos', 'Dashboard de progreso completo (tendencia CEFR y analíticas)', 'Revisa cualquier sesión anterior con feedback completo', 'Voces de IA naturales premium', 'Hasta {premiumJds} descripciones de puesto'] },
       { name: 'Enterprise', cta: 'Contactar ventas', features: ['Todo lo de Pro', 'Panel de equipo y analíticas del manager', 'Escenarios compartidos de la empresa', 'Invita y gestiona a tus miembros', 'Usuarios ilimitados', 'Soporte dedicado'] },
     ],
   },
@@ -195,7 +195,7 @@ const fr: Dict = {
     perMo: '/mois',
     plans: [
       { name: 'Starter', cta: 'Commencer gratuitement', features: ['{freeSessions} scénarios par mois', 'Retour IA basique', 'Évaluation CEFR instantanée à chaque session', '{freeJds} fiche de poste', '!Tableau de bord de progression et historique', '!Revoir les sessions passées avec le retour', '!Voix naturelles premium'] },
-      { name: 'Pro', cta: 'Passer à Pro', features: ['Scénarios illimités', 'Retour IA avancé', 'Pratique bonus pour les plus actifs', 'Tableau de bord complet (tendance CEFR et analyses)', 'Revoyez toute session passée avec le retour complet', 'Voix IA naturelles premium', "Jusqu'à {premiumJds} fiches de poste", 'Support prioritaire'] },
+      { name: 'Pro', cta: 'Passer à Pro', features: ['Scénarios illimités', 'Retour IA avancé', 'Pratique bonus pour les plus actifs', 'Tableau de bord complet (tendance CEFR et analyses)', 'Revoyez toute session passée avec le retour complet', 'Voix IA naturelles premium', "Jusqu'à {premiumJds} fiches de poste"] },
       { name: 'Enterprise', cta: 'Contacter les ventes', features: ['Tout Pro', "Tableau de bord d'équipe et analyses du manager", "Scénarios partagés de l'entreprise", 'Invitez et gérez vos membres', 'Utilisateurs illimités', 'Support dédié'] },
     ],
   },
@@ -255,7 +255,7 @@ const pt: Dict = {
     perMo: '/mês',
     plans: [
       { name: 'Starter', cta: 'Começar grátis', features: ['{freeSessions} cenários por mês', 'Feedback básico com IA', 'Avaliação CEFR na hora em cada sessão', '{freeJds} descrição de vaga', '!Painel de progresso e histórico', '!Revisar sessões anteriores com feedback', '!Vozes naturais premium'] },
-      { name: 'Pro', cta: 'Virar Pro', features: ['Cenários ilimitados', 'Feedback avançado com IA', 'Prática bônus para os usuários mais ativos', 'Painel de progresso completo (tendência CEFR e análises)', 'Revise qualquer sessão anterior com feedback completo', 'Vozes de IA naturais premium', 'Até {premiumJds} descrições de vaga', 'Suporte prioritário'] },
+      { name: 'Pro', cta: 'Virar Pro', features: ['Cenários ilimitados', 'Feedback avançado com IA', 'Prática bônus para os usuários mais ativos', 'Painel de progresso completo (tendência CEFR e análises)', 'Revise qualquer sessão anterior com feedback completo', 'Vozes de IA naturais premium', 'Até {premiumJds} descrições de vaga'] },
       { name: 'Enterprise', cta: 'Falar com vendas', features: ['Tudo do Pro', 'Painel da equipe e análises do gestor', 'Cenários compartilhados da empresa', 'Convide e gerencie seus membros', 'Usuários ilimitados', 'Suporte dedicado'] },
     ],
   },
