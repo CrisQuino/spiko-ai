@@ -167,6 +167,7 @@ export default function DemoPage() {
   
   const [scenarioCompleted, setScenarioCompleted] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(true); // Demo mode flag - default to true until auth check
+  const [isPremiumUser, setIsPremiumUser] = useState(false); // premium/corporate → full transcript; else gated
   const [demoTimeLimit] = useState(2 * 60 * 1000); // 2 minutes for demo
   const [isCheckingAuth, setIsCheckingAuth] = useState(true); // Loading state for auth check
   
@@ -199,12 +200,20 @@ export default function DemoPage() {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const isAuthenticated = !!session;
-      
+
       console.log('🔐 Auth check:', isAuthenticated ? 'Authenticated' : 'Not authenticated');
       setIsDemoMode(!isAuthenticated);
+      // Reading the FULL AI transcript is a Pro feature: premium (B2C) and
+      // corporate (B2B) users see everything; free/demo users get a gated preview.
+      if (isAuthenticated && session?.user) {
+        const { data: profile } = await supabase.from('profiles').select('plan, company_id').eq('id', session.user.id).single();
+        setIsPremiumUser(!!profile?.company_id || profile?.plan === 'premium');
+      } else {
+        setIsPremiumUser(false);
+      }
       setIsCheckingAuth(false);
     };
-    
+
     checkAuth();
   }, []);
   
@@ -1492,7 +1501,12 @@ export default function DemoPage() {
             {messages.map((message, index) => {
               const isLastAIMessage = message.role === 'ai' && index === messages.length - 1;
               const showAudioIndicator = isLastAIMessage && isPlayingAudio;
-              
+              // Reading the full transcript is a Pro feature. Free/demo users get
+              // the first AI line free, then every OTHER AI line is blurred behind
+              // an elegant "Pro feature" banner (they still HEAR the audio).
+              const aiOrdinal = message.role === 'ai' ? messages.slice(0, index + 1).filter((m) => m.role === 'ai').length : 0;
+              const transcriptGated = message.role === 'ai' && !isPremiumUser && aiOrdinal >= 2 && aiOrdinal % 2 === 0;
+
               return (
               <motion.div
                 key={index}
@@ -1526,7 +1540,17 @@ export default function DemoPage() {
                       ? 'glass border-2 border-purple-400 shadow-lg shadow-purple-200'
                       : 'glass border border-gray-200'
                   }`}>
-                    <p className="text-sm leading-relaxed">{message.content}</p>
+                    {transcriptGated ? (
+                      <div className="relative">
+                        <p className="text-sm leading-relaxed select-none blur-[6px] opacity-60" aria-hidden="true">{message.content}</p>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-white text-xs font-mono font-bold shadow-md">🔒 Pro feature</span>
+                          <span className="text-[10px] font-mono text-gray-500">read the full transcript with Pro</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm leading-relaxed">{message.content}</p>
+                    )}
                   </div>
                 </div>
               </motion.div>
