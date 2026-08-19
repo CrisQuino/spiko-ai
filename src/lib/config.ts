@@ -64,7 +64,7 @@ export const config = {
     sendgrid: {
       apiKey: process.env.SENDGRID_API_KEY || '',
     },
-    from: process.env.EMAIL_FROM || 'SPEECK.AI <noreply@spiko.ai>',
+    from: process.env.EMAIL_FROM || 'SPEECK.AI <noreply@speeck.ai>',
     
     // Testing mode: if set, ALL emails go to this address
     // Leave empty for production (sends to actual recipients)
