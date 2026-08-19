@@ -168,6 +168,10 @@ export default function DemoPage() {
   const [scenarioCompleted, setScenarioCompleted] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(true); // Demo mode flag - default to true until auth check
   const [isPremiumUser, setIsPremiumUser] = useState(false); // premium/corporate → full transcript; else gated
+  // Pro live-transcript control: 'auto' scales visibility with the level
+  // (≤B1 full, B2 partial, C1+ hidden live), 'on' always shows, 'off' always hides.
+  // The post-session review always shows the full transcript regardless.
+  const [transcriptMode, setTranscriptMode] = useState<'auto' | 'on' | 'off'>('auto');
   const [demoTimeLimit] = useState(2 * 60 * 1000); // 2 minutes for demo
   const [isCheckingAuth, setIsCheckingAuth] = useState(true); // Loading state for auth check
   
@@ -1505,7 +1509,18 @@ export default function DemoPage() {
               // the first AI line free, then every OTHER AI line is blurred behind
               // an elegant "Pro feature" banner (they still HEAR the audio).
               const aiOrdinal = message.role === 'ai' ? messages.slice(0, index + 1).filter((m) => m.role === 'ai').length : 0;
+              const levelIdx = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].indexOf((levelRef.current || '').toUpperCase());
+              // Free/demo: monetization gate (Pro upsell). Premium/corporate:
+              // level-based listening practice (Auto), overridable with the toggle.
               const transcriptGated = message.role === 'ai' && !isPremiumUser && aiOrdinal >= 2 && aiOrdinal % 2 === 0;
+              let hiddenForPractice = false;
+              if (message.role === 'ai' && isPremiumUser) {
+                if (transcriptMode === 'off') hiddenForPractice = true;
+                else if (transcriptMode === 'auto') {
+                  if (levelIdx >= 4) hiddenForPractice = true;                    // C1/C2: hidden live
+                  else if (levelIdx === 3) hiddenForPractice = aiOrdinal % 2 === 0; // B2: partial
+                }
+              }
 
               return (
               <motion.div
@@ -1548,6 +1563,14 @@ export default function DemoPage() {
                           <span className="text-[10px] font-mono text-gray-500">read the full transcript with Pro</span>
                         </div>
                       </div>
+                    ) : hiddenForPractice ? (
+                      <div className="relative">
+                        <p className="text-sm leading-relaxed select-none blur-[7px] opacity-50" aria-hidden="true">{message.content}</p>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white text-xs font-mono font-bold shadow-md">🎧 listening practice{levelRef.current ? ` · ${levelRef.current}` : ''}</span>
+                          <span className="text-[10px] font-mono text-gray-500">full transcript in your review</span>
+                        </div>
+                      </div>
                     ) : (
                       <p className="text-sm leading-relaxed">{message.content}</p>
                     )}
@@ -1563,6 +1586,14 @@ export default function DemoPage() {
       <div className="border-t border-gray-200/50 bg-white/80 backdrop-blur-xl">
         <div className="container mx-auto px-6 py-4">
           <div className="max-w-4xl mx-auto">
+            {isPremiumUser && (
+              <div className="flex items-center justify-end gap-1.5 mb-2 font-mono text-xs">
+                <span className="text-gray-400 mr-1">transcript:</span>
+                {(['auto', 'on', 'off'] as const).map((m) => (
+                  <button key={m} onClick={() => setTranscriptMode(m)} className={`px-2 py-0.5 rounded transition-all ${transcriptMode === m ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 text-white' : 'bg-white/60 text-gray-600 hover:bg-white'}`}>{m}</button>
+                ))}
+              </div>
+            )}
             <div className="flex gap-3">
               <div className="relative flex-1">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600 font-mono">$</span>
