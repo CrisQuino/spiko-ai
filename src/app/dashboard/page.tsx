@@ -178,9 +178,9 @@ export default function DashboardPage() {
               <Link href="/" className="text-gray-400 hover:text-white transition-colors font-mono text-sm">
                 home()
               </Link>
-              <Link href="/demo" className="text-gray-400 hover:text-white transition-colors font-mono text-sm">
+              <button onClick={() => setSetupOpen(true)} className="text-gray-400 hover:text-white transition-colors font-mono text-sm">
                 practice()
-              </Link>
+              </button>
               <Link href="/dashboard/settings" className="text-gray-400 hover:text-white transition-colors font-mono text-sm">
                 settings()
               </Link>
@@ -316,9 +316,9 @@ export default function DashboardPage() {
                 <h3 className="text-xl font-bold font-mono">
                   <span className="text-gray-400">// </span>recent_conversations
                 </h3>
-                <Link href="/demo" className="text-cyan-600 hover:text-emerald-600 font-mono text-sm">
+                <button onClick={() => setSetupOpen(true)} className="text-cyan-600 hover:text-emerald-600 font-mono text-sm">
                   start_new() →
-                </Link>
+                </button>
               </div>
 
               {filteredConversations.length === 0 ? (
