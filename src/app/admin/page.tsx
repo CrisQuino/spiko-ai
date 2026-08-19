@@ -141,7 +141,7 @@ function SuperAdminPanel() {
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: '', allowed_email_domain: '', max_users: '5', daily_practice_limit: '', monthly_practice_limit: '', max_jds_per_user: '' });
+  const [form, setForm] = useState({ name: '', allowed_email_domain: '', max_users: '5', daily_practice_limit: '', monthly_practice_limit: '', max_jds_per_user: '', transcript_policy: 'default' });
   const [banQuery, setBanQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<'all' | Channel>('all');
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -208,10 +208,11 @@ function SuperAdminPanel() {
       daily_practice_limit: num(form.daily_practice_limit),
       monthly_practice_limit: num(form.monthly_practice_limit),
       max_jds_per_user: num(form.max_jds_per_user),
+      transcript_policy: form.transcript_policy,
     });
     setBusy(false);
     if (r.status === 200) {
-      setForm({ name: '', allowed_email_domain: '', max_users: '5', daily_practice_limit: '', monthly_practice_limit: '', max_jds_per_user: '' });
+      setForm({ name: '', allowed_email_domain: '', max_users: '5', daily_practice_limit: '', monthly_practice_limit: '', max_jds_per_user: '', transcript_policy: 'default' });
       setShowCreate(false);
       flash('✓ company created');
       loadAll();
@@ -419,6 +420,14 @@ function SuperAdminPanel() {
           <Field label="Daily limit (blank = ∞)" value={form.daily_practice_limit} onChange={(v) => setForm({ ...form, daily_practice_limit: v })} type="number" />
           <Field label="Monthly limit (blank = ∞)" value={form.monthly_practice_limit} onChange={(v) => setForm({ ...form, monthly_practice_limit: v })} type="number" />
           <Field label="Max JDs / user (blank = ∞)" value={form.max_jds_per_user} onChange={(v) => setForm({ ...form, max_jds_per_user: v })} type="number" />
+          <label className="block">
+            <span className="font-mono text-xs text-gray-500">Live transcript policy</span>
+            <select value={form.transcript_policy} onChange={(e) => setForm({ ...form, transcript_policy: e.target.value })} className="mt-1 w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm">
+              <option value="default">Default (by level: B2 partial, C1+ hidden)</option>
+              <option value="always">Always show</option>
+              <option value="hidden">Always hidden (strict listening)</option>
+            </select>
+          </label>
           <div className="sm:col-span-2 lg:col-span-3">
             <button onClick={createCompany} disabled={busy} className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-mono text-sm disabled:opacity-50 hover:shadow-lg transition-all">
               create_company()
