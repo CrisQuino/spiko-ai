@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ companies: withCounts });
       }
       case 'create_company': {
-        const { name, allowed_email_domain, max_users, daily_practice_limit, monthly_practice_limit, max_jds_per_user } = body;
+        const { name, allowed_email_domain, max_users, daily_practice_limit, monthly_practice_limit, max_jds_per_user, transcript_policy } = body;
         if (!name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 });
         const slug = `${String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${crypto.randomUUID().slice(0, 6)}`;
         const { data, error } = await db.from('companies').insert({
@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
           daily_practice_limit: daily_practice_limit === '' || daily_practice_limit == null ? null : Number(daily_practice_limit),
           monthly_practice_limit: monthly_practice_limit === '' || monthly_practice_limit == null ? null : Number(monthly_practice_limit),
           max_jds_per_user: max_jds_per_user === '' || max_jds_per_user == null ? null : Number(max_jds_per_user),
+          transcript_policy: ['default', 'always', 'hidden'].includes(transcript_policy) ? transcript_policy : 'default',
         }).select().single();
         if (error) throw error;
         return NextResponse.json({ company: data });

@@ -79,6 +79,70 @@ export async function POST(request: NextRequest) {
         const priced = (data || []).map((l: any) => ({ ...l, total_cost: Number(l.total_cost || 0) * mult }));
         return NextResponse.json({ lessons: priced, priceView: true });
       }
+      case 'create_interview': {
+        // Manager invites a candidate (any email) to a quick language interview.
+        const { candidate_email, candidate_name, language, level, jd_id } = body as {
+          candidate_email?: string; candidate_name?: string; language?: string; level?: string; jd_id?: string;
+        };
+        if (!candidate_email?.trim()) return NextResponse.json({ error: 'email_required' }, { status: 400 });
+        // Snapshot the JD (company JD or a member's JD) so the interview is stable
+        // even if the JD later changes; scope the lookup to this company.
+        let jd_title: string | null = null, jd_content: string | null = null;
+        if (jd_id) {
+          const { data: jd } = await db.from('job_descriptions').select('title, content, user_id, company_id').eq('id', jd_id).single();
+          if (jd) {
+            const belongs = jd.company_id === companyId
+              || (jd.user_id && (await db.from('profiles').select('company_id').eq('id', jd.user_id).single()).data?.company_id === companyId);
+            if (belongs) { jd_title = jd.title; jd_content = jd.content; }
+          }
+        }
+        const token = crypto.randomBytes(24).toString('base64url');
+        const { data: invite, error } = await db.from('interview_invites').insert({
+          token, company_id: companyId, manager_id: user.id,
+          candidate_email: candidate_email.trim(), candidate_name: candidate_name?.trim() || null,
+          language: language || 'en', level: level || null, jd_title, jd_content, status: 'sent',
+        }).select().single();
+        if (error) return NextResponse.json({ error: 'db_error', detail: error.message }, { status: 500 });
+
+        const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+        const url = `${origin}/interview/${token}`;
+        // Best-effort email (does not fail the invite if the mailer is down).
+        let emailed = false;
+        try {
+          const { Resend } = await import('resend');
+          const { config } = await import('@/lib/config');
+          if (process.env.RESEND_API_KEY) {
+            const to = config.email.testingEmail || candidate_email.trim();
+            const { data: company } = await db.from('companies').select('name').eq('id', companyId).single();
+            await new Resend(process.env.RESEND_API_KEY).emails.send({
+              from: config.email.from, to,
+              subject: `Language interview invitation${company?.name ? ` · ${company.name}` : ''} — SPEECK.AI`,
+              html: `<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:560px;margin:0 auto;color:#0d1526">
+                <div style="background:linear-gradient(135deg,#10b981,#06b6d4 55%,#3b82f6);border-radius:14px;padding:28px;color:#fff;text-align:center">
+                  <div style="font-size:34px;font-weight:800;letter-spacing:-2px">&lt;/&gt;</div>
+                  <h1 style="margin:8px 0 0;font-size:22px">You're invited to a language interview</h1>
+                </div>
+                <div style="padding:24px 6px">
+                  <p>${company?.name || 'A company'} has invited you to a short spoken interview on <b>SPEECK.AI</b>.</p>
+                  <p style="background:#f6f8f9;border-left:3px solid #10b981;padding:12px 14px;border-radius:8px">
+                    ${jd_title ? `Role: <b>${jd_title}</b><br>` : ''}Language: <b>${(language || 'en').toUpperCase()}</b>${level ? ` · Level: <b>${level}</b>` : ''}
+                  </p>
+                  <p>No account needed — just open the link, allow your microphone, and speak.</p>
+                  <p style="text-align:center"><a href="${url}" style="display:inline-block;background:linear-gradient(90deg,#10b981,#06b6d4,#3b82f6);color:#fff;text-decoration:none;padding:13px 26px;border-radius:10px;font-weight:700">Start the interview</a></p>
+                  <p style="font-size:12px;color:#64748b;word-break:break-all">${url}</p>
+                  <p style="font-size:12px;color:#64748b">This invitation expires in 21 days.</p>
+                </div></div>`,
+            });
+            emailed = true;
+          }
+        } catch (e) { console.error('interview email failed:', e); }
+        return NextResponse.json({ invite, url, emailed });
+      }
+      case 'list_interviews': {
+        const { data } = await db.from('interview_invites')
+          .select('*').eq('company_id', companyId).order('created_at', { ascending: false }).limit(200);
+        return NextResponse.json({ interviews: data || [] });
+      }
       case 'set_domain_mode': {
         // Manager sets their own company's invite-domain policy.
         const mode = body.mode === 'manager' ? 'manager' : 'any';

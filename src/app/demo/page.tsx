@@ -172,6 +172,8 @@ export default function DemoPage() {
   // (≤B1 full, B2 partial, C1+ hidden live), 'on' always shows, 'off' always hides.
   // The post-session review always shows the full transcript regardless.
   const [transcriptMode, setTranscriptMode] = useState<'auto' | 'on' | 'off'>('auto');
+  const interviewTokenRef = useRef<string | null>(null); // set when this is a candidate interview run
+  const [interviewPolicy, setInterviewPolicy] = useState<string | null>(null); // company transcript policy
   const [demoTimeLimit] = useState(2 * 60 * 1000); // 2 minutes for demo
   const [isCheckingAuth, setIsCheckingAuth] = useState(true); // Loading state for auth check
   
@@ -196,6 +198,25 @@ export default function DemoPage() {
           console.warn('⚠️ Job description not found or not accessible:', jdId);
         }
       });
+    }
+
+    // Interview mode: a candidate opened a tokenized invite (no login). Pull the
+    // language / level / JD snapshot + the company's transcript policy from it.
+    const interviewTok = params.get('interview');
+    if (interviewTok) {
+      interviewTokenRef.current = interviewTok;
+      fetch(`/api/interview/${interviewTok}`).then((r) => r.json()).then((inv) => {
+        if (inv?.ok) {
+          const ilang = getLanguage(inv.language);
+          setLanguage(ilang); languageRef.current = ilang;
+          levelRef.current = inv.level || null;
+          if (inv.jd_title || inv.jd_content) {
+            setJdTitle(inv.jd_title || '');
+            jdRef.current = { content: inv.jd_content || '', title: inv.jd_title || '' };
+          }
+          setInterviewPolicy(inv.transcript_policy || 'default');
+        }
+      }).catch(() => {});
     }
   }, []);
 
@@ -367,6 +388,29 @@ export default function DemoPage() {
       console.log('💾 Setting CEFR assessment state...');
       setCefrAssessment(assessment);
       console.log('✅ CEFR assessment state set!');
+
+      // Interview mode: record the result back to the tokenized invite so the
+      // manager sees this candidate's CEFR + transcript in their panel.
+      if (interviewTokenRef.current) {
+        fetch(`/api/interview/${interviewTokenRef.current}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'complete',
+            result: {
+              cefr_overall: assessment.overall?.level,
+              pronunciation_score: assessment.pronunciation?.score,
+              fluency_score: assessment.fluency?.score,
+              vocabulary_score: assessment.vocabulary?.score,
+              grammar_score: assessment.grammar?.score,
+              interaction_score: assessment.interaction?.score,
+              comprehension_score: assessment.comprehension?.score,
+              overall_score: assessment.overall?.score,
+              final_feedback: assessment.finalFeedback,
+              transcript: currentMessages,
+            },
+          }),
+        }).catch(() => {});
+      }
       
       // 🔄 BACKGROUND: Save to server (non-blocking, non-critical)
       // Only save if we have a lessonId (server start succeeded)
@@ -1510,15 +1554,21 @@ export default function DemoPage() {
               // an elegant "Pro feature" banner (they still HEAR the audio).
               const aiOrdinal = message.role === 'ai' ? messages.slice(0, index + 1).filter((m) => m.role === 'ai').length : 0;
               const levelIdx = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].indexOf((levelRef.current || '').toUpperCase());
-              // Free/demo: monetization gate (Pro upsell). Premium/corporate:
-              // level-based listening practice (Auto), overridable with the toggle.
-              const transcriptGated = message.role === 'ai' && !isPremiumUser && aiOrdinal >= 2 && aiOrdinal % 2 === 0;
+              const levelScale = () => (levelIdx >= 4 ? true : levelIdx === 3 ? aiOrdinal % 2 === 0 : false);
+              // Interview: the company's transcript policy rules. Free/demo:
+              // monetization gate (Pro upsell). Premium: level-based + Pro toggle.
+              let transcriptGated = false;
               let hiddenForPractice = false;
-              if (message.role === 'ai' && isPremiumUser) {
-                if (transcriptMode === 'off') hiddenForPractice = true;
-                else if (transcriptMode === 'auto') {
-                  if (levelIdx >= 4) hiddenForPractice = true;                    // C1/C2: hidden live
-                  else if (levelIdx === 3) hiddenForPractice = aiOrdinal % 2 === 0; // B2: partial
+              if (message.role === 'ai') {
+                if (interviewTokenRef.current) {
+                  const policy = interviewPolicy || 'default';
+                  hiddenForPractice = policy === 'hidden' ? true : policy === 'always' ? false : levelScale();
+                } else if (!isPremiumUser) {
+                  transcriptGated = aiOrdinal >= 2 && aiOrdinal % 2 === 0;
+                } else if (transcriptMode === 'off') {
+                  hiddenForPractice = true;
+                } else if (transcriptMode === 'auto') {
+                  hiddenForPractice = levelScale();
                 }
               }
 

@@ -41,6 +41,10 @@ export default function TeamDashboardPage() {
   const [msg, setMsg] = useState('');
   const [inviteLink, setInviteLink] = useState('');
   const [jdModal, setJdModal] = useState<null | { mode: 'new' | 'edit'; id?: string; title: string; content: string }>(null);
+  const [interviews, setInterviews] = useState<any[]>([]);
+  const [ivForm, setIvForm] = useState({ email: '', name: '', language: 'en', level: '', jdId: '' });
+  const [ivBusy, setIvBusy] = useState(false);
+  const [ivMsg, setIvMsg] = useState('');
 
   const teamApi = useCallback(async (action: string, params: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -58,14 +62,31 @@ export default function TeamDashboardPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push('/auth/login'); return; }
     setSelfId(user.id);
-    const [o, a, j, mj] = await Promise.all([teamApi('overview'), teamApi('analytics'), teamApi('list_company_jds'), teamApi('list_member_jds')]);
+    const [o, a, j, mj, iv] = await Promise.all([teamApi('overview'), teamApi('analytics'), teamApi('list_company_jds'), teamApi('list_member_jds'), teamApi('list_interviews')]);
     if (o.status === 403) { router.push('/dashboard'); return; }
     if (o.status === 200) setOv(o.body);
     if (a.status === 200) setLessons(a.body.lessons || []);
     if (j.status === 200) setJds(j.body.jds || []);
     if (mj.status === 200) setMemberJds(mj.body.jds || []);
+    if (iv.status === 200) setInterviews(iv.body.interviews || []);
     setLoading(false);
   }, [router, teamApi]);
+
+  const createInterview = async () => {
+    if (!ivForm.email.trim()) { setIvMsg('✕ candidate email required'); return; }
+    setIvBusy(true); setIvMsg('');
+    const r = await teamApi('create_interview', {
+      candidate_email: ivForm.email, candidate_name: ivForm.name, language: ivForm.language,
+      level: ivForm.level || null, jd_id: ivForm.jdId || null,
+    });
+    setIvBusy(false);
+    if (r.status === 200) {
+      setIvMsg(r.body.emailed ? '✓ invitation sent' : '✓ created (email not configured — copy the link)');
+      setIvForm({ email: '', name: '', language: 'en', level: '', jdId: '' });
+      const iv = await teamApi('list_interviews');
+      if (iv.status === 200) setInterviews(iv.body.interviews || []);
+    } else setIvMsg(`✕ ${r.body?.error || 'error'}`);
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -158,6 +179,69 @@ export default function TeamDashboardPage() {
 
         {/* Company-scoped analytics — same panels as the super-admin dashboard */}
         <DashboardAnalytics lessons={lessons} priceView />
+
+        {/* Quick interviews — invite any candidate (no login needed) */}
+        <div className="glass rounded-2xl p-6 border border-gray-200/50 space-y-5">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-xl font-bold font-mono"><span className="text-gray-400">// </span>interviews()</h2>
+            {ivMsg && <span className={`font-mono text-xs px-2.5 py-1 rounded-md ${ivMsg.startsWith('✓') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{ivMsg}</span>}
+          </div>
+
+          {/* New interview */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+            <label className="block"><span className="font-mono text-xs text-gray-500">Candidate email *</span>
+              <input value={ivForm.email} onChange={(e) => setIvForm((f) => ({ ...f, email: e.target.value }))} placeholder="candidate@email.com" className="mt-1 w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm" /></label>
+            <label className="block"><span className="font-mono text-xs text-gray-500">Name</span>
+              <input value={ivForm.name} onChange={(e) => setIvForm((f) => ({ ...f, name: e.target.value }))} placeholder="optional" className="mt-1 w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm" /></label>
+            <label className="block"><span className="font-mono text-xs text-gray-500">Language</span>
+              <select value={ivForm.language} onChange={(e) => setIvForm((f) => ({ ...f, language: e.target.value }))} className="mt-1 w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm">
+                <option value="en">English</option><option value="fr">Français</option><option value="pt">Português</option>
+              </select></label>
+            <label className="block"><span className="font-mono text-xs text-gray-500">Level</span>
+              <select value={ivForm.level} onChange={(e) => setIvForm((f) => ({ ...f, level: e.target.value }))} className="mt-1 w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm">
+                <option value="">Auto</option>{['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].map((l) => <option key={l} value={l}>{l}</option>)}
+              </select></label>
+            <label className="block"><span className="font-mono text-xs text-gray-500">Role (JD)</span>
+              <select value={ivForm.jdId} onChange={(e) => setIvForm((f) => ({ ...f, jdId: e.target.value }))} className="mt-1 w-full bg-white/70 border border-gray-200 rounded-md px-3 py-2 font-mono text-sm">
+                <option value="">None</option>
+                {jds.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
+                {memberJds.map((j) => <option key={j.id} value={j.id}>{j.title} ({j.owner_email})</option>)}
+              </select></label>
+          </div>
+          <button onClick={createInterview} disabled={ivBusy} className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-mono text-sm disabled:opacity-50 hover:shadow-lg transition-all">
+            {ivBusy ? 'sending()…' : '＋ send_interview()'}
+          </button>
+
+          {/* Candidates + results */}
+          <div className="space-y-2">
+            {interviews.length === 0 && <p className="font-mono text-xs text-gray-400">// no_interviews_yet</p>}
+            {interviews.map((iv) => {
+              const badge = iv.status === 'completed' ? 'bg-emerald-100 text-emerald-700' : iv.status === 'started' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500';
+              return (
+                <div key={iv.id} className="rounded-lg border border-gray-200 bg-white/60 p-3">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <p className="font-mono text-sm font-bold text-gray-800 truncate">{iv.candidate_name ? `${iv.candidate_name} · ` : ''}{iv.candidate_email}</p>
+                      <p className="font-mono text-[11px] text-gray-500 mt-0.5">
+                        {iv.jd_title ? `${iv.jd_title} · ` : ''}{(iv.language || 'en').toUpperCase()}{iv.level ? ` · ${iv.level}` : ''} · {new Date(iv.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`px-2 py-0.5 rounded font-mono text-[11px] ${badge}`}>{iv.status}</span>
+                      <button onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/interview/${iv.token}`); setIvMsg('✓ link copied'); }} className="px-2 py-1 rounded font-mono text-[11px] bg-white/70 border border-gray-200 hover:bg-white">copy_link()</button>
+                    </div>
+                  </div>
+                  {iv.status === 'completed' && (
+                    <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-xs">
+                      <span className="px-2 py-1 rounded-md bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-bold">CEFR {iv.cefr_overall || '—'}</span>
+                      <span className="text-gray-500">pron {iv.pronunciation_score ?? '—'} · flu {iv.fluency_score ?? '—'} · voc {iv.vocabulary_score ?? '—'} · gram {iv.grammar_score ?? '—'} · inter {iv.interaction_score ?? '—'} · comp {iv.comprehension_score ?? '—'}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Company management */}
         <div className="glass rounded-2xl p-6 border border-gray-200/50 space-y-6">
